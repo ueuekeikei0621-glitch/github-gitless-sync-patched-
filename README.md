@@ -1,3 +1,47 @@
+# GitHub Gitless Sync (patched fork)
+
+A fork of [GitHub Gitless Sync](https://github.com/silvanocerza/github-gitless-sync)
+1.0.7 by Silvano Cerza, fixed for use on an iPhone together with tools that
+edit the repository directly, such as Claude or the GitHub web editor.
+
+Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
+repository's URL. It has the same plugin id, so it replaces the original plugin
+and keeps its settings and sync state.
+
+## Changes in 1.1.0 (2026-10-29)
+
+- **Changes made outside the plugin are synced.** The plugin compares the
+  repository itself with its metadata, so files added, edited or deleted on
+  GitHub by other means reach the vault (upstream #45, #53).
+- **A commit made during a sync is never reverted.** Each sync is based on the
+  branch head it read; if the branch moves before the sync commits, it starts
+  over on top of the new commit.
+- **Binary files sync on iOS.** Uploads send the file bytes, so images, PDFs
+  and other binary files no longer fail with "The file couldn't be opened
+  because it isn't in the correct format" (upstream #20), and the recorded SHA
+  is always the SHA of what was uploaded.
+- **A failed sync can't cost local edits.** Uploads are recorded only after
+  GitHub accepts the commit; before, the next sync could download the old
+  version over the local file.
+- **Moving or deleting files no longer stops syncing.** Notes moved or deleted
+  in Obsidian while they changed on GitHub, and files deleted outside Obsidian,
+  used to fail every sync with "File does not exist" (upstream #9, #33).
+- **New setting: Keep media on this device** (on by default). Images, video,
+  audio and PDF created on the device are never uploaded and stay out of the
+  remote metadata. Media that are already in the repository sync as usual.
+- **Sync on startup works**, and also syncs when you return to the app.
+- **"Overwrite local file" conflict handling** now downloads the remote file;
+  it used to upload the local one.
+- **First sync on a new device** no longer copies hidden folders such as
+  `.github` into the vault.
+- **Truncated repository listings** stop the sync instead of being taken as
+  deletions.
+
+These modifications are distributed under the same AGPL-3.0 license as the
+original. The original README follows.
+
+---
+
 # GitHub Gitless Sync
 
 Plugin to sync a GitHub repository with an Obsidian vault.
