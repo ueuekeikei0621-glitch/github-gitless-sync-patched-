@@ -7,6 +7,7 @@ import {
   Notice,
 } from "obsidian";
 import GitHubSyncPlugin from "src/main";
+import { MEDIA_EXTENSIONS } from "src/settings/settings";
 import { copyToClipboard } from "src/utils";
 
 export default class GitHubSyncSettingsTab extends PluginSettingTab {
@@ -141,7 +142,7 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Sync on startup")
-      .setDesc("Download up to date files from remote on startup")
+      .setDesc("Sync when Obsidian starts and when you come back to it")
       .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.syncOnStartup)
@@ -167,6 +168,34 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+
+    new Setting(containerEl)
+      .setName("Keep media on this device")
+      .setDesc(
+        "Images, video, audio and PDF files created here are never uploaded. " +
+          "Media files that are already in the repository still sync.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.keepMediaLocal)
+          .onChange(async (value) => {
+            this.plugin.settings.keepMediaLocal = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Media file extensions")
+      .setDesc("Comma separated extensions treated as media by the setting above")
+      .addTextArea((text) =>
+        text
+          .setPlaceholder(MEDIA_EXTENSIONS)
+          .setValue(this.plugin.settings.mediaExtensions)
+          .onChange(async (value) => {
+            this.plugin.settings.mediaExtensions = value;
+            await this.plugin.saveSettings();
+          }),
+      );
 
     const conflictHandlingOptions = {
       overwriteLocal: "Overwrite local file",

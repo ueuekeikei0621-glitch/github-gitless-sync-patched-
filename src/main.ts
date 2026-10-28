@@ -34,6 +34,9 @@ export default class GitHubSyncPlugin extends Plugin {
   conflictsResolver: ((resolutions: ConflictResolution[]) => void) | null =
     null;
 
+  // When the last sync triggered by startup or by returning to the app ran
+  private lastAutoSync = 0;
+
   // We keep track of the sync conflicts in here too in case the
   // conflicts view must be rebuilt, or the user closes the view
   // and it gets destroyed.
@@ -122,6 +125,21 @@ export default class GitHubSyncPlugin extends Plugin {
       if (this.settings.showSyncRibbonButton) {
         this.showSyncRibbonIcon();
       }
+
+      if (this.settings.syncOnStartup) {
+        this.autoSync();
+      }
+    });
+
+    // On mobile the app is mostly resumed rather than restarted, so coming
+    // back to it counts as a startup too.
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (
+        document.visibilityState === "visible" &&
+        this.settings.syncOnStartup
+      ) {
+        this.autoSync();
+      }
     });
 
     this.addCommand({
@@ -139,6 +157,28 @@ export default class GitHubSyncPlugin extends Plugin {
       icon: "refresh-cw",
       callback: this.openConflictsView.bind(this),
     });
+  }
+
+  isConfigured() {
+    return !(
+      this.settings.githubToken === "" ||
+      this.settings.githubOwner === "" ||
+      this.settings.githubRepo === "" ||
+      this.settings.githubBranch === ""
+    );
+  }
+
+  // Syncs on startup or return to the app, skipping it when the plugin is not
+  // set up yet or such a sync just ran.
+  autoSync() {
+    if (!this.isConfigured() || this.settings.firstSync) {
+      return;
+    }
+    if (Date.now() - this.lastAutoSync < 10_000) {
+      return;
+    }
+    this.lastAutoSync = Date.now();
+    this.sync();
   }
 
   async sync() {

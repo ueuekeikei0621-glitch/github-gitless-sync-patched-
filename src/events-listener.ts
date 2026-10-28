@@ -71,8 +71,23 @@ export default class EventsListener {
       return;
     }
 
-    this.metadataStore.data.files[filePath].deleted = true;
-    this.metadataStore.data.files[filePath].deletedAt = Date.now();
+    const now = Date.now();
+    const data = this.metadataStore.data.files[filePath];
+    if (data) {
+      data.deleted = true;
+      data.deletedAt = now;
+    } else {
+      // Never tracked, e.g. created while the plugin was disabled
+      this.metadataStore.data.files[filePath] = {
+        path: filePath,
+        sha: null,
+        dirty: false,
+        justDownloaded: false,
+        lastModified: now,
+        deleted: true,
+        deletedAt: now,
+      };
+    }
     await this.metadataStore.save();
     await this.logger.info("Updated deleted file", filePath);
   }
@@ -89,7 +104,12 @@ export default class EventsListener {
       return;
     }
     const data = this.metadataStore.data.files[file.path];
-    if (data && data.justDownloaded) {
+    if (!data || data.deleted) {
+      // Never tracked, or tracked as deleted: same as a new file
+      await this.onCreate(file);
+      return;
+    }
+    if (data.justDownloaded) {
       // This file was just downloaded and not modified by the user.
       // It's enough to makr it as non just downloaded.
       this.metadataStore.data.files[file.path].justDownloaded = false;

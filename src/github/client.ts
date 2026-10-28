@@ -76,18 +76,20 @@ export default class GithubClient {
   /**
    * Gets the content of the repo.
    *
+   * @param ref Commit to read, defaults to the head of the branch
    * @param retry Whether to retry the request on failure (default: false)
    * @param maxRetries Maximum number of retry attempts (default: 5)
    * @returns Array of files in the directory in the remote repo
    */
   async getRepoContent({
+    ref = this.settings.githubBranch,
     retry = false,
     maxRetries = 5,
   } = {}): Promise<RepoContent> {
     const response = await retryUntil(
       async () => {
         return requestUrl({
-          url: `https://api.github.com/repos/${this.settings.githubOwner}/${this.settings.githubRepo}/git/trees/${this.settings.githubBranch}?recursive=1`,
+          url: `https://api.github.com/repos/${this.settings.githubOwner}/${this.settings.githubRepo}/git/trees/${ref}?recursive=1`,
           headers: this.headers(),
           throw: false,
         });
@@ -102,6 +104,12 @@ export default class GithubClient {
         response.status,
         `Failed to get repo content, status ${response.status}`,
       );
+    }
+
+    if (response.json.truncated) {
+      // A partial listing would make missing files look deleted
+      await this.logger.error("Repository listing truncated", ref);
+      throw new Error("The repository has too many files to list at once");
     }
 
     const files = response.json.tree

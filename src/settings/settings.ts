@@ -14,7 +14,16 @@ export interface GitHubSyncSettings {
   showSyncRibbonButton: boolean;
   showConflictsRibbonButton: boolean;
   enableLogging: boolean;
+  keepMediaLocal: boolean;
+  mediaExtensions: string;
 }
+
+// Images, video, audio and PDF, as Obsidian can embed them.
+export const MEDIA_EXTENSIONS =
+  "png, jpg, jpeg, gif, webp, heic, heif, avif, bmp, tif, tiff, svg, " +
+  "mp4, mov, m4v, webm, mkv, ogv, avi, 3gp, " +
+  "mp3, m4a, wav, aac, ogg, oga, opus, flac, " +
+  "pdf";
 
 export const DEFAULT_SETTINGS: GitHubSyncSettings = {
   firstSync: true,
@@ -32,4 +41,6 @@ export const DEFAULT_SETTINGS: GitHubSyncSettings = {
   showSyncRibbonButton: true,
   showConflictsRibbonButton: true,
   enableLogging: false,
+  keepMediaLocal: true,
+  mediaExtensions: MEDIA_EXTENSIONS,
 };

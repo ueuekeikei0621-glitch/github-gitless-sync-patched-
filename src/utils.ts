@@ -65,6 +65,58 @@ export function hasTextExtension(filePath: string) {
 }
 
 /**
+ * Calculates the SHA1 git gives a blob with this content.
+ *
+ * @param content The blob content
+ * @returns The hex SHA1
+ */
+export async function gitBlobSHA(content: ArrayBuffer): Promise<string> {
+  const bytes = new Uint8Array(content);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const store = new Uint8Array(header.length + bytes.length);
+  store.set(header);
+  store.set(bytes, header.length);
+  const hash = await crypto.subtle.digest("SHA-1", store);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Encodes text as UTF-8.
+ *
+ * @param text The text to encode
+ * @returns A buffer holding exactly the encoded bytes
+ */
+export function textToArrayBuffer(text: string): ArrayBuffer {
+  const bytes = new TextEncoder().encode(text);
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+/**
+ * Checks if a file path has one of the given extensions.
+ *
+ * @param filePath The path of the file to check
+ * @param extensions Comma separated extensions, with or without the dot
+ * @returns True if the file has one of the extensions, ignoring case
+ */
+export function isMediaFile(filePath: string, extensions: string) {
+  const name = filePath.split("/").pop() ?? "";
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) {
+    return false;
+  }
+  const extension = name.slice(dot + 1).toLowerCase();
+  return extensions
+    .split(",")
+    .map((e) => e.trim().replace(/^\./, "").toLowerCase())
+    .includes(extension);
+}
+
+/**
  * Retries an async function until its return value satisfies a condition or max retries is reached.
  * Uses exponential backoff between retry attempts.
  *
