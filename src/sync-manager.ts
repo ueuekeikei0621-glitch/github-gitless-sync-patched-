@@ -817,6 +817,18 @@ export default class SyncManager {
         }
 
         const localSHA = await this.calculateSHA(filePath);
+        if (
+          remoteFile.deleted &&
+          !localFile.deleted &&
+          localSHA !== null &&
+          localSHA === localFile.sha
+        ) {
+          // Deleted on another device and unchanged here since the last sync.
+          // A deletion keeps the SHA of what was deleted, so the check below
+          // would take this copy for up to date.
+          actions.push({ type: "delete_local", filePath: filePath });
+          return;
+        }
         if (remoteFile.sha === localSHA) {
           // If the remote file sha is identical to the actual sha of the local file
           // there are no actions to take.

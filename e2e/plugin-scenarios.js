@@ -249,6 +249,37 @@ async function main() {
     "Overwrite remote: the phone's version wins on both sides");
   phone.settings.conflictHandling = "ask";
 
+  section("16. A note deleted on one device goes from the others");
+  const ipad = new Phone(path.join(root, "ipad"));
+  {
+    const now = fake.manifest();
+    const copies = {};
+    for (const [p, entry] of Object.entries(now.files)) {
+      if (entry.deleted || entry.sha === null || p.split("/").some((s) => s.startsWith("."))) continue;
+      copies[p] = git(remote, ["cat-file", "blob", entry.sha]);
+    }
+    await ipad.init(copies, now);
+    ipad.vault.iosLike = true;
+  }
+  await phone.edit("消すメモ.md", "消す予定\n");
+  await phone.edit("残すメモ.md", "残すかも\n");
+  await phone.sync();
+  r = await ipad.sync();
+  check(noErrors(r) && ipad.read("消すメモ.md") === "消す予定\n", "the iPad gets the notes");
+  await phone.remove("消すメモ.md");
+  await phone.remove("残すメモ.md");
+  await phone.sync();
+  await ipad.edit("残すメモ.md", "残すかも\niPadで追記\n");
+  r = await ipad.sync();
+  check(noErrors(r) && ipad.read("消すメモ.md") === null && fake.manifest().files["消すメモ.md"]?.deleted === true,
+    "deleted on the phone, it goes from the iPad at its next sync");
+  check(fake.file("残すメモ.md") === "残すかも\niPadで追記\n", "a note edited on the iPad since is kept and goes up again");
+  r = await phone.sync();
+  check(noErrors(r) && phone.read("残すメモ.md") === "残すかも\niPadで追記\n" && phone.read("消すメモ.md") === null,
+    "and comes back to the phone");
+  r = await ipad.sync();
+  check(noErrors(r) && logged(r, "Nothing to sync"), "then neither side has anything to do");
+
   section("Final state");
   r = await phone.sync();
   check(noErrors(r) && logged(r, "Nothing to sync"), "nothing left to sync");
