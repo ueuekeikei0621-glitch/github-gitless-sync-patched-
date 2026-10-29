@@ -8,6 +8,28 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.3.0 (2026-10-29)
+
+- **New photos shrink before they're uploaded** (on by default). Photos added
+  on the device are scaled to 2500 pixels on the longest side and saved as
+  JPEG at 80% quality, usually several times smaller, and the original never
+  reaches the repository.
+  - PNG, HEIC and other formats become `.jpg` files, and the links to them in
+    every note and canvas follow, however they're written. HEIC also becomes
+    readable on PCs.
+  - Rotated photos come out upright, and location metadata is dropped.
+  - A photo is renamed only once it and the notes linking to it have been left
+    alone for a minute (three if no note links to it yet), so a note still
+    being written is never changed under the editor.
+  - Screenshots under 1 MB, GIF and SVG stay as they are, and so does anything
+    that can't be decoded or wouldn't shrink by at least a quarter. A photo
+    that kills the app twice while it's shrunk, most likely out of memory,
+    goes up as it is.
+  - Images downloaded from the repository are never touched.
+  - Size and quality are settings.
+- The settings for videos, audio and photos have their own sections after
+  "Conflict handling", which had ended up under the videos section.
+
 ## Changes in 1.2.0 (2026-10-29)
 
 - **Videos and audio sync through GitHub Releases** (on by default). Files
