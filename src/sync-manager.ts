@@ -29,6 +29,10 @@ import {
 import GitHubSyncPlugin from "./main";
 import { BlobReader, Entry, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js";
 
+// GitHub serves blobs of up to 100 MB, so a larger file couldn't reach the
+// other devices: it stays on the device that has it.
+const MAX_FILE_SIZE = 100 * 1000 * 1000;
+
 interface SyncAction {
   type: "upload" | "download" | "delete_local" | "delete_remote";
   filePath: string;
@@ -57,6 +61,10 @@ export default class SyncManager {
   private images: ImageShrinker;
   // Files of the repository as the last sync read them
   private lastTree: { [key: string]: GetTreeResponseItem } = {};
+  // Files too large for the repository, as the current sync round found them
+  private oversized = new Set<string>();
+  // Files said to be too large, by path and size, so that it's said once
+  private toldOversized = new Set<string>();
   private syncIntervalId: number | null = null;
 
   // Use to track if syncing is in progress, this ideally
@@ -497,22 +505,35 @@ export default class SyncManager {
     }
 
     const remotePaths = new Set(Object.keys(files));
-    const actions: SyncAction[] = [
+    this.oversized.clear();
+    const actions: SyncAction[] = [];
+    for (const action of [
       ...(await this.determineSyncActions(
         remoteFiles,
         this.metadataStore.data.files,
         conflictActions.map((action) => action.filePath),
       )),
       ...conflictActions,
-    ].filter(
-      // Media created on this device stay on it. Media that came from the
-      // repository sync as usual.
-      (action) =>
-        !(
-          (action.type === "upload" || action.type === "delete_remote") &&
-          this.isLocalOnly(action.filePath, remotePaths)
-        ),
-    );
+    ]) {
+      if (
+        (action.type === "upload" || action.type === "delete_remote") &&
+        this.isLocalOnly(action.filePath, remotePaths)
+      ) {
+        // Media created on this device stay on it. Media that came from the
+        // repository sync as usual.
+        continue;
+      }
+      if (
+        action.type === "upload" &&
+        !conflictResolutions.some((r) => r.filePath === action.filePath) &&
+        (await this.isOversized(action.filePath))
+      ) {
+        // Too large for GitHub: it stays on this device, and if the
+        // repository has an older version, that stays there.
+        continue;
+      }
+      actions.push(action);
+    }
 
     if (actions.length === 0) {
       // Nothing to sync
@@ -651,7 +672,35 @@ export default class SyncManager {
       return false;
     }
     // A new photo waiting to be shrunk is uploaded by a later sync
-    return this.images.isDeferred(filePath) || this.staysLocal(filePath);
+    return (
+      this.images.isDeferred(filePath) ||
+      this.oversized.has(filePath) ||
+      this.staysLocal(filePath)
+    );
+  }
+
+  /**
+   * Whether filePath is too large to upload. The first time, says so.
+   */
+  private async isOversized(filePath: string): Promise<boolean> {
+    const stat = await this.vault.adapter.stat(normalizePath(filePath));
+    if (stat === null || stat.size <= MAX_FILE_SIZE) {
+      return false;
+    }
+    this.oversized.add(filePath);
+    const key = `${filePath}\n${stat.size}`;
+    if (!this.toldOversized.has(key)) {
+      this.toldOversized.add(key);
+      await this.logger.warn("Too large for GitHub", {
+        filePath,
+        size: stat.size,
+      });
+      new Notice(
+        `Not syncing ${filePath}: GitHub takes files up to 100 MB. It stays on this device.`,
+        10000,
+      );
+    }
+    return true;
   }
 
   /**
@@ -992,6 +1041,10 @@ export default class SyncManager {
       const resolution = conflictResolutions.find(
         (c: ConflictResolution) => c.filePath === filePath,
       );
+      if (!resolution && (await this.isOversized(filePath))) {
+        // Like in syncImpl, for the first sync
+        continue;
+      }
       if (
         !resolution &&
         !(await this.vault.adapter.exists(normalizePath(filePath)))

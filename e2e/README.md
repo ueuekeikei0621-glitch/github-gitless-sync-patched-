@@ -21,6 +21,9 @@ ueuekeikei0621-glitch/obsidian-).
   encoder: waiting for the note to be saved and left alone, PNG and HEIC
   renamed to .jpg with their links in every form and in canvases, what stays
   untouched, downloaded images, a photo that kills the app, settings.
+- `large-file-scenarios.js`: files over GitHub's 100 MB limit stay on the
+  device without stopping the sync or making empty commits: new files, a file
+  on GitHub that grows over it, exactly 100 MB, the first sync.
 - `image-encode-test.js`: the real encoder in headless Chromium (Playwright) on
   images made with ImageMagick and Pillow: EXIF orientation, size limit,
   transparency, quality, bad input. `run.sh` runs it when Playwright is there.

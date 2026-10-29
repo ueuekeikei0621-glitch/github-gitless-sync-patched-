@@ -190,6 +190,9 @@ class FakeGitHub {
 
   createBlob({ content, encoding }) {
     const input = Buffer.from(content, encoding === "base64" ? "base64" : "utf8");
+    // GitHub documents that it serves blobs of up to 100 MB; the fake doesn't
+    // even take larger ones, so that an upload of one fails the test
+    if (input.length > 100 * 1000 * 1000) return response(422, { message: "Blob too large" });
     return response(201, { sha: this.g(["hash-object", "-w", "--stdin"], { input }).toString().trim() });
   }
 
