@@ -269,6 +269,8 @@ export default class ImageShrinker {
   private deferred = new Set<string>();
   // Images left as they are, by path, size and modification time
   private kept = new Set<string>();
+  // Images that can't be shrunk on this device
+  private unshrinkable = new Set<string>();
   private state: ImageState | null = null;
   // The notes and canvases, read once per sync when an image is renamed
   private texts: Map<TFile, string> | null = null;
@@ -298,6 +300,17 @@ export default class ImageShrinker {
     return (
       (JPEG.includes(extension) || CONVERTED.includes(extension)) &&
       !filePath.split("/").some((part) => part.startsWith("."))
+    );
+  }
+
+  /**
+   * Whether filePath is an image this class may still shrink.
+   */
+  mayShrink(filePath: string): boolean {
+    return (
+      this.settings.shrinkImages &&
+      this.handles(filePath) &&
+      !this.unshrinkable.has(filePath)
     );
   }
 
@@ -404,6 +417,7 @@ export default class ImageShrinker {
     const attempts = state.attempts[key] ?? 0;
     if (attempts >= MAX_ATTEMPTS) {
       this.kept.add(key);
+      this.unshrinkable.add(filePath);
       await this.logger.warn("Gave up shrinking an image", filePath);
       new Notice(
         `Not shrinking ${filePath}: it seems too large for this device.`,
@@ -430,6 +444,7 @@ export default class ImageShrinker {
     if (encoded === null) {
       await this.logger.info("Image can't be shrunk on this device", filePath);
       this.kept.add(key);
+      this.unshrinkable.add(filePath);
       return null;
     }
     if (!uncommon && encoded.data.byteLength > data.byteLength * MIN_SAVING) {

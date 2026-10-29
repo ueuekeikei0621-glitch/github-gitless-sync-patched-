@@ -136,7 +136,14 @@ class Vault {
   // follows its file when it's renamed.
   getAbstractFileByPath(p) {
     p = normalizePath(p);
-    return fs.existsSync(this.full(p)) && fs.statSync(this.full(p)).isFile() ? new TFile(p) : null;
+    return fs.existsSync(this.full(p)) && fs.statSync(this.full(p)).isFile() ? this.tfile(p) : null;
+  }
+  // A TFile with its stat, as Obsidian keeps it
+  tfile(p) {
+    const file = new TFile(p);
+    const st = fs.statSync(this.full(p));
+    file.stat = { ctime: Math.floor(st.ctimeMs), mtime: Math.floor(st.mtimeMs), size: st.size };
+    return file;
   }
   async readBinary(file) { return this.adapter.readBinary(file.path); }
   async cachedRead(file) { return fs.readFileSync(this.full(file.path), "utf8"); }
@@ -168,7 +175,7 @@ class Vault {
         if (entry.name.startsWith(".")) continue;
         const rel = dir === "/" ? entry.name : `${dir}/${entry.name}`;
         if (entry.isDirectory()) walk(rel);
-        else files.push(new TFile(normalizePath(rel)));
+        else files.push(this.tfile(normalizePath(rel)));
       }
     };
     walk("/");

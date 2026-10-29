@@ -221,14 +221,17 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
           });
       });
 
-    new Setting(containerEl).setName("Videos and audio").setHeading();
+    new Setting(containerEl)
+      .setName("Videos, audio and large files")
+      .setHeading();
 
     new Setting(containerEl)
-      .setName("Sync videos and audio through GitHub Releases")
+      .setName("Sync videos, audio and large files through GitHub Releases")
       .setDesc(
-        "Files with the extensions below are kept in a draft release of the " +
-          "repository instead of the repository itself, so every device gets " +
-          "them without filling the repository.",
+        "Files with the extensions below, and any file over 100 MB, the most " +
+          "the repository takes, are kept in a draft release of the " +
+          "repository instead, so every device gets them without filling the " +
+          "repository. Photos over 100 MB are shrunk instead when they can be.",
       )
       .addToggle((toggle) => {
         toggle
@@ -272,7 +275,7 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Download videos and audio from other devices")
+      .setName("Download these files from other devices")
       .setDesc(
         "Turn off on a device short of storage. It still uploads its own files.",
       )

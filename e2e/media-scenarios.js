@@ -45,7 +45,7 @@ function autofix() {
 const noErrors = (r) => !r.notices.some((n) => n.startsWith("Error"));
 // No error at all, media included
 const quiet = (r) =>
-  noErrors(r) && !r.notices.some((n) => /^(Videos and audio didn't|Couldn't|Not syncing|Not downloading)/.test(n));
+  noErrors(r) && !r.notices.some((n) => /^(Videos, audio and large files didn't|Couldn't|Not syncing|Not downloading)/.test(n));
 const said = (r, text) => r.notices.some((n) => n.includes(text));
 const logged = (r, message) => r.log.some((e) => e.message === message);
 const bytes = (n) => crypto.randomBytes(n);

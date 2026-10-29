@@ -16,7 +16,7 @@ import MetadataStore, {
   MANIFEST_FILE_NAME,
 } from "./metadata-store";
 import EventsListener from "./events-listener";
-import MediaSync from "./media-sync";
+import MediaSync, { MAX_REPOSITORY_FILE_SIZE } from "./media-sync";
 import ImageShrinker from "./image-shrink";
 import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
@@ -28,10 +28,6 @@ import {
 } from "./utils";
 import GitHubSyncPlugin from "./main";
 import { BlobReader, Entry, Uint8ArrayWriter, ZipReader } from "@zip.js/zip.js";
-
-// GitHub serves blobs of up to 100 MB, so a larger file couldn't reach the
-// other devices: it stays on the device that has it.
-const MAX_FILE_SIZE = 100 * 1000 * 1000;
 
 interface SyncAction {
   type: "upload" | "download" | "delete_local" | "delete_remote";
@@ -86,13 +82,14 @@ export default class SyncManager {
       this.settings,
       this.logger,
     );
+    this.images = new ImageShrinker(this.vault, this.settings, this.logger);
     this.mediaSync = new MediaSync(
       this.vault,
       this.settings,
       this.client,
       this.logger,
+      (filePath) => this.images.mayShrink(filePath),
     );
-    this.images = new ImageShrinker(this.vault, this.settings, this.logger);
   }
 
   /**
@@ -411,7 +408,8 @@ export default class SyncManager {
       if (!done) {
         throw new Error("The repository kept changing during sync, try again");
       }
-      // Videos and audio, once the notes are safe. It never throws.
+      // Videos, audio and large files, once the notes are safe. It never
+      // throws.
       await this.mediaSync.sync(this.lastTree);
       // Shown only if sync doesn't fail
       new Notice("Sync successful", 5000);
@@ -528,8 +526,9 @@ export default class SyncManager {
         !conflictResolutions.some((r) => r.filePath === action.filePath) &&
         (await this.isOversized(action.filePath))
       ) {
-        // Too large for GitHub: it stays on this device, and if the
-        // repository has an older version, that stays there.
+        // Too large for the repository, and not for the release: it stays on
+        // this device, and if the repository has an older version, that
+        // stays there.
         continue;
       }
       actions.push(action);
@@ -684,7 +683,7 @@ export default class SyncManager {
    */
   private async isOversized(filePath: string): Promise<boolean> {
     const stat = await this.vault.adapter.stat(normalizePath(filePath));
-    if (stat === null || stat.size <= MAX_FILE_SIZE) {
+    if (stat === null || stat.size <= MAX_REPOSITORY_FILE_SIZE) {
       return false;
     }
     this.oversized.add(filePath);

@@ -1,4 +1,4 @@
-import { Notice, Vault, normalizePath } from "obsidian";
+import { Notice, TFile, Vault, normalizePath } from "obsidian";
 import GithubClient, { GetTreeResponseItem } from "./github/client";
 import Logger from "./logger";
 import { GitHubSyncSettings } from "./settings/settings";
@@ -11,6 +11,9 @@ import {
 
 export const MEDIA_INDEX_FILE_NAME = "github-sync-media.json" as const;
 export const MEDIA_STATE_FILE_NAME = "github-sync-media-state.json" as const;
+// GitHub serves blobs of up to 100 MB, so a larger file can't go to the
+// repository: it goes to the release instead.
+export const MAX_REPOSITORY_FILE_SIZE = 100 * 1000 * 1000;
 
 const RELEASE_TAG = "obsidian-media";
 const RELEASE_NAME = "Obsidian videos and audio";
@@ -47,6 +50,7 @@ const MIME_TYPES: { [extension: string]: string } = {
   oga: "audio/ogg",
   opus: "audio/opus",
   flac: "audio/flac",
+  pdf: "application/pdf",
 };
 
 /**
@@ -176,8 +180,8 @@ function serialize(index: MediaIndex): string {
 }
 
 /**
- * Syncs large media, video and audio, through a draft release of the
- * repository instead of the repository itself.
+ * Syncs large media, video and audio, and any file too large for the
+ * repository, through a draft release of the repository instead.
  *
  * The repository only holds the index of those files. Each device compares
  * the index, its own record of the last sync and the files it has, like the
@@ -196,6 +200,8 @@ export default class MediaSync {
     private settings: GitHubSyncSettings,
     private client: GithubClient,
     private logger: Logger,
+    // Whether a photo may still shrink: then it goes to the repository
+    private mayShrink: (filePath: string) => boolean = () => false,
   ) {}
 
   get indexPath() {
@@ -214,14 +220,26 @@ export default class MediaSync {
   }
 
   /**
-   * Whether filePath syncs through the release. The notes sync leaves those
-   * files alone.
+   * Whether filePath syncs through the release: video and audio, and files
+   * too large for the repository. The notes sync leaves those files alone,
+   * unless the repository has them already.
    */
   manages(filePath: string): boolean {
+    if (filePath in this.state.files) {
+      return true;
+    }
+    if (!this.settings.releaseMedia) {
+      return false;
+    }
+    if (isMediaFile(filePath, this.settings.releaseExtensions)) {
+      return true;
+    }
+    const file = this.vault.getAbstractFileByPath(filePath);
     return (
-      (this.settings.releaseMedia &&
-        isMediaFile(filePath, this.settings.releaseExtensions)) ||
-      filePath in this.state.files
+      file instanceof TFile &&
+      file.stat.size > MAX_REPOSITORY_FILE_SIZE &&
+      !filePath.split("/").some((part) => part.startsWith(".")) &&
+      !this.mayShrink(filePath)
     );
   }
 
@@ -318,7 +336,7 @@ export default class MediaSync {
       await this.logger.error("Media sync failed", `${err}`);
       this.notify(
         "failed",
-        `Videos and audio didn't sync, trying again later. ${err}`,
+        `Videos, audio and large files didn't sync, trying again later. ${err}`,
       );
       this.state.retry = true;
       await this.save().catch(() => {});
@@ -441,7 +459,8 @@ export default class MediaSync {
   ): Promise<boolean> {
     const head = await this.client.getBranchHeadSha({ retry: true });
     const indexSha = await this.client.getFileSha(this.indexPath, head);
-    const index = indexSha === null ? emptyIndex() : await this.readIndex(indexSha);
+    const index =
+      indexSha === null ? emptyIndex() : await this.readIndex(indexSha);
     const next: MediaIndex = JSON.parse(JSON.stringify(index));
     // Recorded once the new index is committed
     const synced: { [path: string]: LocalEntry | null } = {};
@@ -449,7 +468,8 @@ export default class MediaSync {
 
     const actions = await this.plan(tree, index, local);
     const transfers = actions.filter(
-      (a) => a.kind === "download" || a.kind === "upload" || a.kind === "conflict",
+      (a) =>
+        a.kind === "download" || a.kind === "upload" || a.kind === "conflict",
     ).length;
     let transfer = 0;
     let progress: Notice | null = null;
@@ -458,7 +478,10 @@ export default class MediaSync {
       if (size < 1024 * 1024) {
         return;
       }
-      const message = `Videos and audio ${transfer}/${transfers}: ${verb} ${filePath.split("/").pop()} (${Math.round(size / 1024 / 1024)} MB)`;
+      const kind = isMediaFile(filePath, this.settings.releaseExtensions)
+        ? "Videos and audio"
+        : "Large files";
+      const message = `${kind} ${transfer}/${transfers}: ${verb} ${filePath.split("/").pop()} (${Math.round(size / 1024 / 1024)} MB)`;
       if (progress === null) {
         progress = new Notice(message, 0);
       } else {
@@ -517,7 +540,11 @@ export default class MediaSync {
         } else if (action.kind === "remove-remote") {
           const entry = next.files[action.path];
           delete next.files[action.path];
-          next.trash.push({ ...entry, path: action.path, deletedAt: this.now() });
+          next.trash.push({
+            ...entry,
+            path: action.path,
+            deletedAt: this.now(),
+          });
           synced[action.path] = null;
         } else if (action.kind === "remove-local") {
           if (await this.vault.adapter.exists(action.path)) {
@@ -696,7 +723,11 @@ export default class MediaSync {
           actions.push({ kind: "upload", path: filePath, file });
         }
       } else if (sha === remote.sha) {
-        this.state.files[filePath] = { sha, size: file.size, mtime: file.mtime };
+        this.state.files[filePath] = {
+          sha,
+          size: file.size,
+          mtime: file.mtime,
+        };
       } else if (known === undefined || (changed && remote.sha !== known.sha)) {
         actions.push({ kind: "conflict", path: filePath, file, remote });
       } else if (changed) {
@@ -827,7 +858,8 @@ export default class MediaSync {
           releaseId: release,
           name,
           data,
-          contentType: MIME_TYPES[extensionOf(filePath)] ?? "application/octet-stream",
+          contentType:
+            MIME_TYPES[extensionOf(filePath)] ?? "application/octet-stream",
         });
         if (result === "no-release") {
           // Deleted on GitHub: make a new one
