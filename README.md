@@ -8,6 +8,22 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.4.0 (2026-10-29)
+
+- **Files over 100 MB sync through the release too.** The repository takes
+  files of up to 100 MB, so larger ones, a big PDF for instance, now go to
+  the draft release like videos, and every device gets them. The release's
+  size limit (100 MB by default) and "Download these files from other
+  devices" apply to them as well.
+  - Once in the release, a file stays there, even made smaller.
+  - Photos over 100 MB are shrunk into the repository instead, unless they
+    can't be.
+  - A file the repository already has keeps its older version there if it
+    grows over 100 MB, as before.
+  - Devices still on 1.2.0 to 1.3.1 download these files and leave them in
+    the release.
+- The settings section is now "Videos, audio and large files".
+
 ## Changes in 1.3.1 (2026-10-29)
 
 - **Files over 100 MB no longer stop the sync.** GitHub serves files of up to
