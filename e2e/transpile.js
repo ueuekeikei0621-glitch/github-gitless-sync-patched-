@@ -13,8 +13,10 @@ const outDir = path.resolve(
 const mock = path.join(__dirname, "obsidian-mock.js");
 const zip = require.resolve("@zip.js/zip.js", { paths: [root] });
 
+// Older versions, built for comparison, lack some of these.
 const files = [
   "sync-manager.ts",
+  "media-sync.ts",
   "github/client.ts",
   "metadata-store.ts",
   "events-listener.ts",
@@ -23,7 +25,7 @@ const files = [
   "settings/settings.ts",
   "settings/tab.ts",
   "main.ts",
-];
+].filter((file) => fs.existsSync(path.join(srcDir, file)));
 for (const file of files) {
   const source = fs.readFileSync(path.join(srcDir, file), "utf8");
   let { outputText } = ts.transpileModule(source, {

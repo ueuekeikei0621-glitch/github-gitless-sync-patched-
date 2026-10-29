@@ -7,7 +7,7 @@ import {
   Notice,
 } from "obsidian";
 import GitHubSyncPlugin from "src/main";
-import { MEDIA_EXTENSIONS } from "src/settings/settings";
+import { MEDIA_EXTENSIONS, RELEASE_EXTENSIONS } from "src/settings/settings";
 import { copyToClipboard } from "src/utils";
 
 export default class GitHubSyncSettingsTab extends PluginSettingTab {
@@ -172,7 +172,8 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Keep media on this device")
       .setDesc(
-        "Images, video, audio and PDF files created here are never uploaded. " +
+        "Images, video, audio and PDF files created here are never uploaded, " +
+          "unless they sync through GitHub Releases (see below). " +
           "Media files that are already in the repository still sync.",
       )
       .addToggle((toggle) => {
@@ -196,6 +197,70 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    new Setting(containerEl).setName("Videos and audio").setHeading();
+
+    new Setting(containerEl)
+      .setName("Sync videos and audio through GitHub Releases")
+      .setDesc(
+        "Files with the extensions below are kept in a draft release of the " +
+          "repository instead of the repository itself, so every device gets " +
+          "them without filling the repository.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.releaseMedia)
+          .onChange(async (value) => {
+            this.plugin.settings.releaseMedia = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Video and audio file extensions")
+      .setDesc("Comma separated extensions synced through the release")
+      .addTextArea((text) =>
+        text
+          .setPlaceholder(RELEASE_EXTENSIONS)
+          .setValue(this.plugin.settings.releaseExtensions)
+          .onChange(async (value) => {
+            this.plugin.settings.releaseExtensions = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Largest file to sync (MB)")
+      .setDesc(
+        "Larger files stay on the device that has them. A phone may not " +
+          "have the memory for very large files.",
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("100")
+          .setValue(`${this.plugin.settings.releaseMaxSizeMB}`)
+          .onChange(async (value) => {
+            const size = Number(value);
+            if (Number.isFinite(size) && size > 0) {
+              this.plugin.settings.releaseMaxSizeMB = size;
+              await this.plugin.saveSettings();
+            }
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Download videos and audio from other devices")
+      .setDesc(
+        "Turn off on a device short of storage. It still uploads its own files.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.downloadReleaseMedia)
+          .onChange(async (value) => {
+            this.plugin.settings.downloadReleaseMedia = value;
+            await this.plugin.saveSettings();
+          });
+      });
 
     const conflictHandlingOptions = {
       overwriteLocal: "Overwrite local file",

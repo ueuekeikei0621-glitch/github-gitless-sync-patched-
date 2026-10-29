@@ -71,6 +71,11 @@ const configured = {
   t = await load({ ...configured, syncOnStartup: true });
   check(t.plugin.settings.keepMediaLocal === true, "old settings get the new media option, on");
   check(t.plugin.settings.mediaExtensions.includes("heic"), "with the default extensions");
+  check(t.plugin.settings.releaseMedia === true && t.plugin.settings.downloadReleaseMedia === true,
+    "and videos and audio sync through the release");
+  check(t.plugin.settings.releaseExtensions.includes("mov") && !t.plugin.settings.releaseExtensions.includes("png"),
+    "for video and audio extensions only");
+  check(t.plugin.settings.releaseMaxSizeMB === 100, "up to 100 MB");
 
   console.log(`\n${failures === 0 ? "ALL PASSED" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

@@ -42,7 +42,13 @@ class FakeGitHub {
     this.requests = [];
     this.beforeHeadLookup = null; // test hook, runs once
     this.hooks = []; // [{ key: "POST git/trees", fn }], each runs once
+    this.faults = []; // [{ key, status }]: answer the next matching request with an error
     this.indexFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fakegh-")), "index");
+    // Releases live outside git, like on GitHub
+    this.releases = [];
+    this.nextId = 1000;
+    this.uploads = 0; // assets actually stored
+    this.clock = () => Date.now();
   }
 
   g(args, opts) { return git(this.gitDir, args, opts); }
@@ -57,12 +63,24 @@ class FakeGitHub {
     const prefix = `/repos/${OWNER}/${REPO}/`;
     if (!url.pathname.startsWith(prefix)) return response(404, { message: "Not Found" });
     const rest = decodeURIComponent(url.pathname.slice(prefix.length));
-    const body = req.body ? JSON.parse(req.body) : undefined;
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     this.requests.push(`${method} ${rest}`);
     const hook = this.hooks.find((h) => `${method} ${rest}`.startsWith(h.key));
     if (hook) {
       this.hooks.splice(this.hooks.indexOf(hook), 1);
       await hook.fn();
+    }
+    const fault = this.faults.find((f) => `${method} ${rest}`.startsWith(f.key));
+    if (fault) {
+      this.faults.splice(this.faults.indexOf(fault), 1);
+      return response(fault.status, { message: "Injected failure" });
+    }
+    const release = this.releaseRoute(method, rest, url, body, req);
+    if (release) return release;
+    if (method === "GET" && rest.startsWith("contents/")) return this.fileSha(rest.slice(9), url.searchParams.get("ref"));
+    const commit = rest.match(/^git\/commits\/([0-9a-f]{40})$/);
+    if (method === "GET" && commit) {
+      return response(200, { sha: commit[1], tree: { sha: this.g(["rev-parse", `${commit[1]}^{tree}`]).toString().trim() } });
     }
     const empty = !this.hasBranch();
     if (empty && method === "GET" && (rest.startsWith("git/trees/") || rest.startsWith("git/refs/"))) {
@@ -182,6 +200,86 @@ class FakeGitHub {
     return response(200, { sha, size: data.length, content: b64, encoding: "base64", url: "", node_id: "" });
   }
 
+  // GET /contents/{path}?ref=: only what the plugin reads, the blob SHA.
+  fileSha(p, ref) {
+    try {
+      const sha = this.g(["rev-parse", `${ref || BRANCH}:${p}`]).toString().trim();
+      return response(200, { type: "file", path: p, sha });
+    } catch {
+      return response(404, { message: "Not Found" });
+    }
+  }
+
+  // The release endpoints the plugin uses, behaving like GitHub's: uploads go
+  // to uploads.github.com, names must be unique and ASCII, drafts have no tag.
+  releaseRoute(method, rest, url, body, req) {
+    const api = url.host === "api.github.com";
+    const asset = (a) => ({ id: a.id, name: a.name, size: a.data.length, state: "uploaded", created_at: a.created_at, content_type: a.content_type });
+    const pub = (r) => ({ id: r.id, tag_name: r.tag_name, name: r.name, draft: r.draft, assets: r.assets.map(asset) });
+    if (rest === "releases" && api && method === "GET") return response(200, this.releases.map(pub));
+    if (rest === "releases" && api && method === "POST") {
+      const r = { id: this.nextId++, tag_name: body.tag_name, name: body.name, body: body.body, draft: !!body.draft, assets: [] };
+      this.releases.push(r);
+      return response(201, pub(r));
+    }
+    let m = rest.match(/^releases\/(\d+)\/assets$/);
+    if (m) {
+      const r = this.releases.find((x) => x.id === Number(m[1]));
+      if (method === "GET" && api) {
+        if (!r) return response(404, { message: "Not Found" });
+        const per = Number(url.searchParams.get("per_page") || 30), page = Number(url.searchParams.get("page") || 1);
+        return response(200, r.assets.slice((page - 1) * per, page * per).map(asset));
+      }
+      if (method === "POST") {
+        if (url.host !== "uploads.github.com") return response(404, { message: "Not Found" });
+        if (!r) return response(404, { message: "Not Found" });
+        let name = url.searchParams.get("name");
+        if (/[^\x21-\x7e]/.test(name)) name = "default" + (name.match(/\.[^.]*$/) || [""])[0];
+        if (r.assets.some((a) => a.name === name)) {
+          return response(422, { message: "Validation Failed", errors: [{ resource: "ReleaseAsset", code: "already_exists", field: "name" }] });
+        }
+        const a = { id: this.nextId++, name, data: Buffer.from(body), created_at: new Date(this.clock()).toISOString(), content_type: req.contentType };
+        r.assets.push(a);
+        this.uploads++;
+        return response(201, asset(a));
+      }
+    }
+    m = rest.match(/^releases\/assets\/(\d+)$/);
+    if (m && api) {
+      const id = Number(m[1]);
+      const r = this.releases.find((x) => x.assets.some((a) => a.id === id));
+      const a = r && r.assets.find((x) => x.id === id);
+      if (method === "DELETE") {
+        if (!a) return response(404, { message: "Not Found" });
+        r.assets.splice(r.assets.indexOf(a), 1);
+        return { status: 204, json: null, text: "", headers: {}, arrayBuffer: new ArrayBuffer(0) };
+      }
+      if (method === "GET") {
+        if (!a) return response(404, { message: "Not Found" });
+        if ((req.headers || {}).Accept !== "application/octet-stream") return response(200, asset(a));
+        const data = a.data;
+        return {
+          status: 200, headers: {}, text: "",
+          get json() { throw new SyntaxError("Not JSON"); },
+          arrayBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+        };
+      }
+    }
+    return null;
+  }
+
+  // All assets, for checks: name -> bytes
+  assets() {
+    const out = {};
+    for (const r of this.releases) for (const a of r.assets) out[a.id] = a;
+    return out;
+  }
+
+  mediaIndex(ref = BRANCH) {
+    const text = this.file(".obsidian/github-sync-media.json", ref);
+    return text === null ? null : JSON.parse(text);
+  }
+
   // Runs fn once, just before answering the first request matching key.
   once(key, fn) { this.hooks.push({ key, fn }); }
 
@@ -242,9 +340,11 @@ const SETTINGS = {
 };
 
 // The phone: a vault directory plus the plugin's SyncManager.
+// build: a transpiled plugin to run instead of the current one, see transpile.js
 class Phone {
-  constructor(root) {
+  constructor(root, build) {
     this.root = root;
+    this.build = build;
     this.conflicts = [];
     this.resolve = (conflicts) => conflicts.map((c) => ({ filePath: c.filePath, content: c.localContent }));
     this.logOffset = 0;
@@ -258,12 +358,14 @@ class Phone {
     }
     fs.mkdirSync(path.join(this.root, ".obsidian"), { recursive: true });
     fs.writeFileSync(path.join(this.root, MANIFEST), JSON.stringify(metadata));
-    const SyncManager = require("./plugin")("sync-manager").default;
-    const Logger = require("./plugin")("logger").default;
+    const load = (name) =>
+      this.build ? require(path.join(this.build, "src", name)) : require("./plugin")(name);
+    const SyncManager = load("sync-manager").default;
+    const Logger = load("logger").default;
     this.vault = new obsidian.Vault(this.root);
     this.logger = new Logger(this.vault, true);
     await this.logger.init();
-    const { DEFAULT_SETTINGS } = require("./plugin")("settings/settings");
+    const { DEFAULT_SETTINGS } = load("settings/settings");
     this.settings = Object.assign({}, DEFAULT_SETTINGS, SETTINGS);
     this.manager = new SyncManager(this.vault, this.settings, async (conflicts) => {
       this.conflicts.push(...conflicts);

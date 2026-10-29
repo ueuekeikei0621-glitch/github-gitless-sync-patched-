@@ -78,6 +78,12 @@ class Vault {
         fs.rmSync(vault.full(p));
         vault.emit("delete", new TFile(normalizePath(p)));
       },
+      async stat(p) {
+        const full = vault.full(p);
+        if (!fs.existsSync(full)) return null;
+        const st = fs.statSync(full);
+        return { type: st.isDirectory() ? "folder" : "file", ctime: Math.floor(st.ctimeMs), mtime: Math.floor(st.mtimeMs), size: st.size };
+      },
       async list(p) {
         const dir = vault.full(p);
         const base = normalizePath(p) === "/" ? "" : normalizePath(p) + "/";
@@ -125,6 +131,21 @@ class Vault {
   }
 
   getRoot() { return { path: "/" }; }
+
+  // Every file of the vault, like Obsidian: hidden files and folders aside.
+  getFiles() {
+    const files = [];
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(this.full(dir), { withFileTypes: true })) {
+        if (entry.name.startsWith(".")) continue;
+        const rel = dir === "/" ? entry.name : `${dir}/${entry.name}`;
+        if (entry.isDirectory()) walk(rel);
+        else files.push(new TFile(normalizePath(rel)));
+      }
+    };
+    walk("/");
+    return files;
+  }
 }
 
 // Just enough of the plugin host to load the plugin's main class.

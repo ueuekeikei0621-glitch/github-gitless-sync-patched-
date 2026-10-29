@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { requestUrl, RequestUrlResponse } from "obsidian";
 import Logger from "src/logger";
 import { GitHubSyncSettings } from "src/settings/settings";
 import { retryUntil } from "src/utils";
@@ -45,6 +45,17 @@ export type BlobFile = {
   url: string;
   content: string;
   encoding: string;
+};
+
+/**
+ * A file attached to a release.
+ */
+export type ReleaseAsset = {
+  id: number;
+  name: string;
+  size: number;
+  state: string;
+  created_at: string;
 };
 
 /**
@@ -453,5 +464,189 @@ export default class GithubClient {
       );
     }
     return response.arrayBuffer;
+  }
+
+  private repoUrl(path: string) {
+    return `https://api.github.com/repos/${this.settings.githubOwner}/${this.settings.githubRepo}/${path}`;
+  }
+
+  private async checked(response: RequestUrlResponse, what: string) {
+    if (response.status < 200 || response.status >= 400) {
+      await this.logger.error(`Failed to ${what}`, response.status);
+      throw new GithubAPIError(
+        response.status,
+        `Failed to ${what}, status ${response.status}`,
+      );
+    }
+    return response;
+  }
+
+  /**
+   * Gets the SHA of a file at a commit, without its content.
+   *
+   * @returns null if the file doesn't exist at that commit
+   */
+  async getFileSha(path: string, ref: string): Promise<string | null> {
+    const response = await requestUrl({
+      url: this.repoUrl(
+        `contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`,
+      ),
+      headers: { ...this.headers(), Accept: "application/vnd.github.object" },
+      throw: false,
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    await this.checked(response, "get file");
+    return response.json.sha;
+  }
+
+  /**
+   * Gets the SHA of the tree of a commit.
+   */
+  async getCommitTreeSha(sha: string): Promise<string> {
+    const response = await requestUrl({
+      url: this.repoUrl(`git/commits/${sha}`),
+      headers: this.headers(),
+      throw: false,
+    });
+    await this.checked(response, "get commit");
+    return response.json.tree.sha;
+  }
+
+  /**
+   * Lists the releases of the repository, drafts included.
+   */
+  async listReleases(): Promise<
+    { id: number; tag_name: string; name: string; draft: boolean }[]
+  > {
+    const response = await requestUrl({
+      url: this.repoUrl("releases?per_page=100"),
+      headers: this.headers(),
+      throw: false,
+    });
+    await this.checked(response, "list releases");
+    return response.json;
+  }
+
+  /**
+   * Creates a draft release. A draft creates no tag in the repository.
+   *
+   * @returns The id of the release
+   */
+  async createDraftRelease({
+    tag,
+    name,
+    body,
+  }: {
+    tag: string;
+    name: string;
+    body: string;
+  }): Promise<number> {
+    const response = await requestUrl({
+      url: this.repoUrl("releases"),
+      headers: this.headers(),
+      method: "POST",
+      body: JSON.stringify({ tag_name: tag, name, body, draft: true }),
+      throw: false,
+    });
+    await this.checked(response, "create release");
+    return response.json.id;
+  }
+
+  /**
+   * Lists all the files attached to a release.
+   */
+  async listReleaseAssets(releaseId: number): Promise<ReleaseAsset[]> {
+    const assets: ReleaseAsset[] = [];
+    for (let page = 1; ; page++) {
+      const response = await requestUrl({
+        url: this.repoUrl(
+          `releases/${releaseId}/assets?per_page=100&page=${page}`,
+        ),
+        headers: this.headers(),
+        throw: false,
+      });
+      await this.checked(response, "list release assets");
+      assets.push(...response.json);
+      if (response.json.length < 100) {
+        return assets;
+      }
+    }
+  }
+
+  /**
+   * Attaches a file to a release.
+   *
+   * @returns The new asset, "exists" if the release has a file with that
+   * name already, "no-release" if the release is gone
+   */
+  async uploadReleaseAsset({
+    releaseId,
+    name,
+    data,
+    contentType,
+  }: {
+    releaseId: number;
+    name: string;
+    data: ArrayBuffer;
+    contentType: string;
+  }): Promise<ReleaseAsset | "exists" | "no-release"> {
+    const response = await requestUrl({
+      url: `https://uploads.github.com/repos/${this.settings.githubOwner}/${this.settings.githubRepo}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`,
+      headers: this.headers(),
+      method: "POST",
+      contentType,
+      body: data,
+      throw: false,
+    });
+    if (
+      response.status === 422 &&
+      response.text.includes('"already_exists"')
+    ) {
+      return "exists";
+    }
+    if (response.status === 404) {
+      return "no-release";
+    }
+    await this.checked(response, "upload release asset");
+    return response.json;
+  }
+
+  /**
+   * Downloads a file attached to a release.
+   *
+   * @returns null if there is no such file
+   */
+  async downloadReleaseAsset(assetId: number): Promise<ArrayBuffer | null> {
+    const response = await requestUrl({
+      url: this.repoUrl(`releases/assets/${assetId}`),
+      headers: { ...this.headers(), Accept: "application/octet-stream" },
+      throw: false,
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    await this.checked(response, "download release asset");
+    return response.arrayBuffer;
+  }
+
+  /**
+   * Deletes a file attached to a release.
+   *
+   * @returns false if there was no such file
+   */
+  async deleteReleaseAsset(assetId: number): Promise<boolean> {
+    const response = await requestUrl({
+      url: this.repoUrl(`releases/assets/${assetId}`),
+      headers: this.headers(),
+      method: "DELETE",
+      throw: false,
+    });
+    if (response.status === 404) {
+      return false;
+    }
+    await this.checked(response, "delete release asset");
+    return true;
   }
 }

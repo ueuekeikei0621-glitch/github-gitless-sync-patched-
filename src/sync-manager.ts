@@ -16,6 +16,7 @@ import MetadataStore, {
   MANIFEST_FILE_NAME,
 } from "./metadata-store";
 import EventsListener from "./events-listener";
+import MediaSync from "./media-sync";
 import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
 import {
@@ -51,6 +52,9 @@ export default class SyncManager {
   private metadataStore: MetadataStore;
   private client: GithubClient;
   private eventsListener: EventsListener;
+  private mediaSync: MediaSync;
+  // Files of the repository as the last sync read them
+  private lastTree: { [key: string]: GetTreeResponseItem } = {};
   private syncIntervalId: number | null = null;
 
   // Use to track if syncing is in progress, this ideally
@@ -70,6 +74,12 @@ export default class SyncManager {
       this.vault,
       this.metadataStore,
       this.settings,
+      this.logger,
+    );
+    this.mediaSync = new MediaSync(
+      this.vault,
+      this.settings,
+      this.client,
       this.logger,
     );
   }
@@ -231,7 +241,8 @@ export default class SyncManager {
         if (
           inConfigDir &&
           (!this.settings.syncConfigDir ||
-            targetPath === `${this.vault.configDir}/${MANIFEST_FILE_NAME}`)
+            targetPath === `${this.vault.configDir}/${MANIFEST_FILE_NAME}` ||
+            this.mediaSync.isInternal(targetPath))
         ) {
           // The metadata file is rebuilt locally, not downloaded
           await this.logger.info("Skipped config", { targetPath });
@@ -387,6 +398,8 @@ export default class SyncManager {
       if (!done) {
         throw new Error("The repository kept changing during sync, try again");
       }
+      // Videos and audio, once the notes are safe. It never throws.
+      await this.mediaSync.sync(this.lastTree);
       // Shown only if sync doesn't fail
       new Notice("Sync successful", 5000);
     } catch (err) {
@@ -411,6 +424,7 @@ export default class SyncManager {
       ref: headSha,
       retry: true,
     });
+    this.lastTree = files;
     const manifest = files[`${this.vault.configDir}/${MANIFEST_FILE_NAME}`];
 
     if (manifest === undefined) {
@@ -622,14 +636,19 @@ export default class SyncManager {
   }
 
   /**
-   * Whether filePath is media created on this device, which stays on it.
+   * Whether filePath stays out of the repository: video and audio synced
+   * through the release, and media created on this device that stays on it.
    * @param remotePaths Paths of the files in the repository
    */
   private isLocalOnly(filePath: string, remotePaths: Set<string>): boolean {
+    if (remotePaths.has(filePath)) {
+      // Already in the repository: it syncs as usual
+      return false;
+    }
     return (
-      this.settings.keepMediaLocal &&
-      isMediaFile(filePath, this.settings.mediaExtensions) &&
-      !remotePaths.has(filePath)
+      this.mediaSync.manages(filePath) ||
+      (this.settings.keepMediaLocal &&
+        isMediaFile(filePath, this.settings.mediaExtensions))
     );
   }
 
@@ -1096,6 +1115,7 @@ export default class SyncManager {
   async loadMetadata() {
     await this.logger.info("Loading metadata");
     await this.metadataStore.load();
+    await this.mediaSync.load();
     if (Object.keys(this.metadataStore.data.files).length === 0) {
       await this.logger.info("Metadata was empty, loading all files");
       let files = [];
@@ -1115,8 +1135,12 @@ export default class SyncManager {
         folders.push(...res.folders);
       }
       files.forEach((filePath: string) => {
-        if (filePath === `${this.vault.configDir}/workspace.json`) {
-          // Obsidian recommends not syncing the workspace file
+        if (
+          filePath === `${this.vault.configDir}/workspace.json` ||
+          this.mediaSync.isInternal(filePath)
+        ) {
+          // Obsidian recommends not syncing the workspace file, and the media
+          // files sync on their own
           return;
         }
 
@@ -1166,6 +1190,10 @@ export default class SyncManager {
     }
     // Add them to the metadata store
     files.forEach((filePath: string) => {
+      if (this.mediaSync.isInternal(filePath)) {
+        // Synced on their own
+        return;
+      }
       this.metadataStore.data.files[filePath] = {
         path: filePath,
         sha: null,
@@ -1255,5 +1283,6 @@ export default class SyncManager {
   async resetMetadata() {
     this.metadataStore.reset();
     await this.metadataStore.save();
+    await this.mediaSync.reset();
   }
 }

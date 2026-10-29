@@ -16,6 +16,11 @@ ueuekeikei0621-glitch/obsidian-).
 - `first-sync-test.js`: first sync into an empty repository, and on a new device.
 - `plugin-scenarios.js`: edits on both sides, conflicts, moves and deletions,
   commits landing during a sync, binary files on iOS, media kept on the device.
+- `media-scenarios.js`: videos and audio synced through a draft release between
+  several phones: moves, deletions and the trash, a lost index, failed uploads,
+  commits landing during a sync, conflicts, size limits, a transfer that kills
+  the app, a new device. With `OLD_BUILD` set to 1.1.0 built by `transpile.js`
+  (`node e2e/transpile.js <1.1.0 src> <out dir>`), also a device still on 1.1.0.
 - `autofix-scenarios.js`: the auto-fix with the original 1.0.7 plugin, from the
   vault's state before the auto-fix existed:
 

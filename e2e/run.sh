@@ -9,3 +9,4 @@ node e2e/transpile.js
 node e2e/main-test.js
 node e2e/first-sync-test.js "$vault"
 node e2e/plugin-scenarios.js "$vault" "$script"
+node e2e/media-scenarios.js "$vault" "$script"

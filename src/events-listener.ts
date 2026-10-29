@@ -3,6 +3,7 @@ import MetadataStore, { MANIFEST_FILE_NAME } from "./metadata-store";
 import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
 import GitHubSyncPlugin from "./main";
+import { MEDIA_INDEX_FILE_NAME, MEDIA_STATE_FILE_NAME } from "./media-sync";
 
 /**
  * Tracks changes to local sync directory and updates files metadata.
@@ -167,6 +168,12 @@ export default class EventsListener {
       return false;
     } else if (filePath === `${this.vault.configDir}/${LOG_FILE_NAME}`) {
       // Don't sync the log file, doesn't make sense
+      return false;
+    } else if (
+      filePath === `${this.vault.configDir}/${MEDIA_INDEX_FILE_NAME}` ||
+      filePath === `${this.vault.configDir}/${MEDIA_STATE_FILE_NAME}`
+    ) {
+      // Synced on their own, see MediaSync
       return false;
     } else if (
       this.settings.syncConfigDir &&
