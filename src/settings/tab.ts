@@ -187,7 +187,9 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Media file extensions")
-      .setDesc("Comma separated extensions treated as media by the setting above")
+      .setDesc(
+        "Comma separated extensions treated as media by the setting above",
+      )
       .addTextArea((text) =>
         text
           .setPlaceholder(MEDIA_EXTENSIONS)
@@ -197,6 +199,27 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    const conflictHandlingOptions = {
+      overwriteLocal: "Overwrite local file",
+      ask: "Ask",
+      overwriteRemote: "Overwrite remote file",
+    };
+    new Setting(containerEl)
+      .setName("Conflict handling")
+      .setDesc(
+        `What to do in case remote and local files conflict
+        when downloading from GitHub repository`,
+      )
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions(conflictHandlingOptions)
+          .setValue(this.plugin.settings.conflictHandling)
+          .onChange(async (value: keyof typeof conflictHandlingOptions) => {
+            this.plugin.settings.conflictHandling = value;
+            await this.plugin.saveSettings();
+          });
+      });
 
     new Setting(containerEl).setName("Videos and audio").setHeading();
 
@@ -262,26 +285,49 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
           });
       });
 
-    const conflictHandlingOptions = {
-      overwriteLocal: "Overwrite local file",
-      ask: "Ask",
-      overwriteRemote: "Overwrite remote file",
-    };
+    new Setting(containerEl).setName("Photos").setHeading();
+
     new Setting(containerEl)
-      .setName("Conflict handling")
+      .setName("Shrink new photos")
       .setDesc(
-        `What to do in case remote and local files conflict
-        when downloading from GitHub repository`,
+        "Photos added on this device are resized and saved as JPEG before " +
+          "they're uploaded; PNG and HEIC files get a .jpg name and their " +
+          "links follow. Screenshots under 1 MB, GIF and SVG stay as they are.",
       )
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOptions(conflictHandlingOptions)
-          .setValue(this.plugin.settings.conflictHandling)
-          .onChange(async (value: keyof typeof conflictHandlingOptions) => {
-            this.plugin.settings.conflictHandling = value;
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.shrinkImages)
+          .onChange(async (value) => {
+            this.plugin.settings.shrinkImages = value;
             await this.plugin.saveSettings();
           });
       });
+
+    new Setting(containerEl).setName("Longest side (pixels)").addText((text) =>
+      text
+        .setPlaceholder("2500")
+        .setValue(`${this.plugin.settings.imageMaxSide}`)
+        .onChange(async (value) => {
+          const side = Math.round(Number(value));
+          if (Number.isFinite(side) && side >= 100) {
+            this.plugin.settings.imageMaxSide = side;
+            await this.plugin.saveSettings();
+          }
+        }),
+    );
+
+    new Setting(containerEl).setName("JPEG quality (%)").addText((text) =>
+      text
+        .setPlaceholder("80")
+        .setValue(`${this.plugin.settings.imageQuality}`)
+        .onChange(async (value) => {
+          const quality = Math.round(Number(value));
+          if (Number.isFinite(quality) && quality >= 10 && quality <= 100) {
+            this.plugin.settings.imageQuality = quality;
+            await this.plugin.saveSettings();
+          }
+        }),
+    );
 
     new Setting(containerEl).setName("Interface").setHeading();
 

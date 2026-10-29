@@ -4,6 +4,7 @@ import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
 import GitHubSyncPlugin from "./main";
 import { MEDIA_INDEX_FILE_NAME, MEDIA_STATE_FILE_NAME } from "./media-sync";
+import { IMAGE_STATE_FILE_NAME } from "./image-shrink";
 
 /**
  * Tracks changes to local sync directory and updates files metadata.
@@ -171,9 +172,10 @@ export default class EventsListener {
       return false;
     } else if (
       filePath === `${this.vault.configDir}/${MEDIA_INDEX_FILE_NAME}` ||
-      filePath === `${this.vault.configDir}/${MEDIA_STATE_FILE_NAME}`
+      filePath === `${this.vault.configDir}/${MEDIA_STATE_FILE_NAME}` ||
+      filePath === `${this.vault.configDir}/${IMAGE_STATE_FILE_NAME}`
     ) {
-      // Synced on their own, see MediaSync
+      // Synced on their own, see MediaSync, or kept on the device
       return false;
     } else if (
       this.settings.syncConfigDir &&

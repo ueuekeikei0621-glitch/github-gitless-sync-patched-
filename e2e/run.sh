@@ -10,3 +10,6 @@ node e2e/main-test.js
 node e2e/first-sync-test.js "$vault"
 node e2e/plugin-scenarios.js "$vault" "$script"
 node e2e/media-scenarios.js "$vault" "$script"
+node e2e/image-scenarios.js "$vault" "$script"
+# The real image encoder, in headless Chromium, when Playwright is there
+if node -e 'require("playwright")' 2>/dev/null; then node e2e/image-encode-test.js; fi

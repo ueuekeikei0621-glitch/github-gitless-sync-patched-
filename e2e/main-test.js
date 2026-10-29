@@ -76,6 +76,8 @@ const configured = {
   check(t.plugin.settings.releaseExtensions.includes("mov") && !t.plugin.settings.releaseExtensions.includes("png"),
     "for video and audio extensions only");
   check(t.plugin.settings.releaseMaxSizeMB === 100, "up to 100 MB");
+  check(t.plugin.settings.shrinkImages === true && t.plugin.settings.imageMaxSide === 2500 &&
+    t.plugin.settings.imageQuality === 80, "and new photos shrink to 2500 pixels, JPEG 80%");
 
   console.log(`\n${failures === 0 ? "ALL PASSED" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

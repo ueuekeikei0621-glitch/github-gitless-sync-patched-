@@ -17,6 +17,8 @@ const zip = require.resolve("@zip.js/zip.js", { paths: [root] });
 const files = [
   "sync-manager.ts",
   "media-sync.ts",
+  "image-shrink.ts",
+  "image-encode.ts",
   "github/client.ts",
   "metadata-store.ts",
   "events-listener.ts",

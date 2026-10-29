@@ -20,6 +20,9 @@ export interface GitHubSyncSettings {
   releaseExtensions: string;
   releaseMaxSizeMB: number;
   downloadReleaseMedia: boolean;
+  shrinkImages: boolean;
+  imageMaxSide: number;
+  imageQuality: number;
 }
 
 const VIDEO_AUDIO_EXTENSIONS =
@@ -57,4 +60,7 @@ export const DEFAULT_SETTINGS: GitHubSyncSettings = {
   releaseExtensions: RELEASE_EXTENSIONS,
   releaseMaxSizeMB: 100,
   downloadReleaseMedia: true,
+  shrinkImages: true,
+  imageMaxSide: 2500,
+  imageQuality: 80,
 };

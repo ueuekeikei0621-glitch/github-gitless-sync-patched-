@@ -132,6 +132,34 @@ class Vault {
 
   getRoot() { return { path: "/" }; }
 
+  // The file-level API, as much as the plugin uses. Like Obsidian, a TFile
+  // follows its file when it's renamed.
+  getAbstractFileByPath(p) {
+    p = normalizePath(p);
+    return fs.existsSync(this.full(p)) && fs.statSync(this.full(p)).isFile() ? new TFile(p) : null;
+  }
+  async readBinary(file) { return this.adapter.readBinary(file.path); }
+  async cachedRead(file) { return fs.readFileSync(this.full(file.path), "utf8"); }
+  async modifyBinary(file, data) { this.writeFile(file.path, Buffer.from(data)); }
+  async process(file, fn) {
+    const text = fs.readFileSync(this.full(file.path), "utf8");
+    const changed = fn(text);
+    if (changed !== text) this.writeFile(file.path, Buffer.from(changed, "utf8"));
+    return changed;
+  }
+  async rename(file, newPath) {
+    const oldPath = file.path;
+    newPath = normalizePath(newPath);
+    if (fs.existsSync(this.full(newPath))) throw new Error("Destination file already exists!");
+    fs.mkdirSync(path.dirname(this.full(newPath)), { recursive: true });
+    fs.renameSync(this.full(oldPath), this.full(newPath));
+    file.path = newPath;
+    for (const cb of this.handlers.rename || []) {
+      this.pending.push(new Promise((resolve) => setTimeout(() => resolve(cb(new TFile(newPath), oldPath)), 5)));
+    }
+  }
+  getMarkdownFiles() { return this.getFiles().filter((f) => f.path.endsWith(".md")); }
+
   // Every file of the vault, like Obsidian: hidden files and folders aside.
   getFiles() {
     const files = [];

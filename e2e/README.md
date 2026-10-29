@@ -16,6 +16,13 @@ ueuekeikei0621-glitch/obsidian-).
 - `first-sync-test.js`: first sync into an empty repository, and on a new device.
 - `plugin-scenarios.js`: edits on both sides, conflicts, moves and deletions,
   commits landing during a sync, binary files on iOS, media kept on the device.
+- `image-scenarios.js`: new photos shrunk before upload, with a stand-in
+  encoder: waiting for the note to be saved and left alone, PNG and HEIC
+  renamed to .jpg with their links in every form and in canvases, what stays
+  untouched, downloaded images, a photo that kills the app, settings.
+- `image-encode-test.js`: the real encoder in headless Chromium (Playwright) on
+  images made with ImageMagick and Pillow: EXIF orientation, size limit,
+  transparency, quality, bad input. `run.sh` runs it when Playwright is there.
 - `media-scenarios.js`: videos and audio synced through a draft release between
   several phones: moves, deletions and the trash, a lost index, failed uploads,
   commits landing during a sync, conflicts, size limits, a transfer that kills

@@ -29,6 +29,9 @@ git(remote, ["update-ref", "refs/heads/main", head]);
 git(remote, ["config", "uploadpack.allowFilter", "true"]);
 const fake = new FakeGitHub(remote);
 obsidian.setRequestHandler((req) => fake.handle(req));
+// The vault's own media index lists assets of its real release, which the
+// fake doesn't have: start from a repository without one.
+if (fake.file(INDEX) !== null) fake.externalCommit({ remove: [INDEX], message: "Start without the media index" });
 const work = path.join(root, "work");
 execFileSync("git", ["clone", "--quiet", "--filter=blob:none", `file://${remote}`, work]);
 

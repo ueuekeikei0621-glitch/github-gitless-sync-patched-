@@ -17,6 +17,7 @@ import MetadataStore, {
 } from "./metadata-store";
 import EventsListener from "./events-listener";
 import MediaSync from "./media-sync";
+import ImageShrinker from "./image-shrink";
 import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
 import {
@@ -53,6 +54,7 @@ export default class SyncManager {
   private client: GithubClient;
   private eventsListener: EventsListener;
   private mediaSync: MediaSync;
+  private images: ImageShrinker;
   // Files of the repository as the last sync read them
   private lastTree: { [key: string]: GetTreeResponseItem } = {};
   private syncIntervalId: number | null = null;
@@ -82,6 +84,7 @@ export default class SyncManager {
       this.client,
       this.logger,
     );
+    this.images = new ImageShrinker(this.vault, this.settings, this.logger);
   }
 
   /**
@@ -242,7 +245,7 @@ export default class SyncManager {
           inConfigDir &&
           (!this.settings.syncConfigDir ||
             targetPath === `${this.vault.configDir}/${MANIFEST_FILE_NAME}` ||
-            this.mediaSync.isInternal(targetPath))
+            this.isInternal(targetPath))
         ) {
           // The metadata file is rebuilt locally, not downloaded
           await this.logger.info("Skipped config", { targetPath });
@@ -389,6 +392,8 @@ export default class SyncManager {
     const notice = new Notice("Syncing...");
     this.syncing = true;
     try {
+      // New photos shrink before they're uploaded. It never throws.
+      await this.images.run(this.newImages());
       // A commit that lands on GitHub while we sync makes ours fail instead of
       // reverting it, so we start over on top of it.
       let done = false;
@@ -645,11 +650,45 @@ export default class SyncManager {
       // Already in the repository: it syncs as usual
       return false;
     }
+    // A new photo waiting to be shrunk is uploaded by a later sync
+    return this.images.isDeferred(filePath) || this.staysLocal(filePath);
+  }
+
+  /**
+   * Whether filePath never goes to the repository: video and audio synced
+   * through the release, and media kept on this device.
+   */
+  private staysLocal(filePath: string): boolean {
     return (
       this.mediaSync.manages(filePath) ||
       (this.settings.keepMediaLocal &&
         isMediaFile(filePath, this.settings.mediaExtensions))
     );
+  }
+
+  /**
+   * Whether filePath is a file of the plugin's own that never syncs as a note.
+   */
+  private isInternal(filePath: string): boolean {
+    return (
+      this.mediaSync.isInternal(filePath) || this.images.isInternal(filePath)
+    );
+  }
+
+  /**
+   * Images added on this device and not uploaded yet, the ones to shrink.
+   * Downloaded files are never among them.
+   */
+  private newImages(): string[] {
+    return Object.values(this.metadataStore.data.files)
+      .filter(
+        (file) =>
+          file.sha === null &&
+          !file.deleted &&
+          this.images.handles(file.path) &&
+          !this.staysLocal(file.path),
+      )
+      .map((file) => file.path);
   }
 
   /**
@@ -1137,7 +1176,7 @@ export default class SyncManager {
       files.forEach((filePath: string) => {
         if (
           filePath === `${this.vault.configDir}/workspace.json` ||
-          this.mediaSync.isInternal(filePath)
+          this.isInternal(filePath)
         ) {
           // Obsidian recommends not syncing the workspace file, and the media
           // files sync on their own
@@ -1190,7 +1229,7 @@ export default class SyncManager {
     }
     // Add them to the metadata store
     files.forEach((filePath: string) => {
-      if (this.mediaSync.isInternal(filePath)) {
+      if (this.isInternal(filePath)) {
         // Synced on their own
         return;
       }
