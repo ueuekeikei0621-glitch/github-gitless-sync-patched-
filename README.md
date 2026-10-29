@@ -8,6 +8,16 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.3.1 (2026-10-29)
+
+- **Files over 100 MB no longer stop the sync.** GitHub serves files of up to
+  100 MB, so a larger file stays on the device that has it, with a notice,
+  and everything else syncs as usual. If GitHub has an older version of it,
+  that version stays there. Videos and audio keep their own limit.
+- **A file deleted on one device is deleted on the others at their next
+  sync.** Before, a device kept its unchanged copy until something else
+  synced. A copy changed since is still kept and uploaded again.
+
 ## Changes in 1.3.0 (2026-10-29)
 
 - **New photos shrink before they're uploaded** (on by default). Photos added
