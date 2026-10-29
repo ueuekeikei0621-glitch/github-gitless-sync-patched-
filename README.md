@@ -8,6 +8,30 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.2.0 (2026-10-29)
+
+- **Videos and audio sync through GitHub Releases** (on by default). Files
+  with a video or audio extension are kept in a draft release of the
+  repository, named after their content, instead of in the repository itself:
+  every device gets them, and they don't count towards the size of the
+  repository. The repository holds only their index,
+  `.obsidian/github-sync-media.json`.
+  - A moved or renamed file is never uploaded again.
+  - A device deletes its copy only when the index records the deletion; if the
+    index is lost, the devices put their files back into a new one.
+  - Deleted files stay in the release for 30 days and can be brought back by
+    moving their entry from `trash` back to `files` in the index.
+  - When two devices change the same file, the other version is kept next to
+    it as `<name>（GitHub側の版 <date>）`.
+  - Files larger than the size limit (100 MB by default) stay on the device
+    that has them. A transfer that kills the app twice, most likely out of
+    memory, isn't tried again until the file or the limit changes.
+  - "Download videos and audio from other devices" can be turned off on a
+    device short of storage.
+  - Notes sync first; a slow or failed media transfer never holds them up.
+  - Devices still on 1.1.0 keep working: they ignore the index and leave it
+    alone.
+
 ## Changes in 1.1.0 (2026-10-29)
 
 - **Changes made outside the plugin are synced.** The plugin compares the
