@@ -74,6 +74,10 @@ class Vault {
       async append(p, data) { fs.appendFileSync(vault.full(p), data); },
       async exists(p) { return fs.existsSync(vault.full(p)); },
       async mkdir(p) { fs.mkdirSync(vault.full(p), { recursive: true }); },
+      async rmdir(p, recursive) {
+        if (recursive) fs.rmSync(vault.full(p), { recursive: true });
+        else fs.rmdirSync(vault.full(p));
+      },
       async remove(p) {
         fs.rmSync(vault.full(p));
         vault.emit("delete", new TFile(normalizePath(p)));

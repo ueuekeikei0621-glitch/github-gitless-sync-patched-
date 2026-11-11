@@ -411,6 +411,9 @@ export default class SyncManager {
       // Videos, audio and large files, once the notes are safe. It never
       // throws.
       await this.mediaSync.sync(this.lastTree);
+      // Folders emptied by deletions and moves, here or on another device.
+      // It never throws.
+      await this.removeEmptyFolders();
       // Shown only if sync doesn't fail
       new Notice("Sync successful", 5000);
     } catch (err) {
@@ -1189,6 +1192,58 @@ export default class SyncManager {
       throw err;
     }
     await this.metadataStore.save();
+  }
+
+  /**
+   * Removes the folders that synced files left empty when they were deleted
+   * or moved, on this device or on another. Git keeps no folders, so one
+   * emptied elsewhere would otherwise stay on this device for good.
+   *
+   * Only a folder that held synced files, holds none now and has nothing at
+   * all left on disk is removed, deepest first. Folders the user made and
+   * never synced a file into, hidden folders and the config dir stay. It never
+   * throws.
+   */
+  private async removeEmptyFolders() {
+    const parent = (p: string) => {
+      const slash = p.lastIndexOf("/");
+      return slash === -1 ? "" : p.slice(0, slash);
+    };
+    const live = new Set<string>();
+    const emptied = new Set<string>();
+    for (const [filePath, entry] of Object.entries(
+      this.metadataStore.data.files,
+    )) {
+      const folders = entry.deleted ? emptied : live;
+      for (let f = parent(filePath); f !== ""; f = parent(f)) {
+        folders.add(f);
+      }
+    }
+    const candidates = [...emptied]
+      .filter(
+        (f) => !live.has(f) && !f.split("/").some((s) => s.startsWith(".")),
+      )
+      .sort((a, b) => b.split("/").length - a.split("/").length);
+    for (const folder of candidates) {
+      try {
+        const normalized = normalizePath(folder);
+        if (!(await this.vault.adapter.exists(normalized))) {
+          continue;
+        }
+        const { files, folders } = await this.vault.adapter.list(normalized);
+        if (files.length > 0 || folders.length > 0) {
+          continue;
+        }
+        // Not recursive: whatever lands in it meanwhile keeps it
+        await this.vault.adapter.rmdir(normalized, false);
+        await this.logger.info("Removed empty folder", folder);
+      } catch (err) {
+        await this.logger.warn("Couldn't remove empty folder", {
+          folder,
+          error: `${err}`,
+        });
+      }
+    }
   }
 
   async deleteLocalFile(filePath: string) {

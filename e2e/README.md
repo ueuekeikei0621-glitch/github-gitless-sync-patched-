@@ -16,7 +16,7 @@ ueuekeikei0621-glitch/obsidian-).
 - `first-sync-test.js`: first sync into an empty repository, and on a new device.
 - `plugin-scenarios.js`: edits on both sides, conflicts, moves and deletions,
   commits landing during a sync, binary files on iOS, media kept on the device,
-  a deletion reaching another device.
+  a deletion reaching another device, folders emptied by moves and deletions.
 - `image-scenarios.js`: new photos shrunk before upload, with a stand-in
   encoder: waiting for the note to be saved and left alone, PNG and HEIC
   renamed to .jpg with their links in every form and in canvases, what stays

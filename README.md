@@ -8,6 +8,21 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.4.1 (2026-11-11)
+
+- **Folders emptied by a move or a deletion go from every device.** Git keeps
+  no folders, so when notes were moved or deleted elsewhere (by Claude, on
+  GitHub or on another device), their old folder stayed behind, empty, on
+  this device. Now a folder that held synced files and has nothing left in it
+  is removed after each sync, deepest first, and the empty folders left by
+  earlier moves go at the next sync.
+  - A folder made by hand that never had a synced file stays, and so does
+    any folder that still holds something, even a file the plugin doesn't
+    sync.
+  - Hidden folders and the config folder are never touched.
+  - Deleting the last notes of a folder in Obsidian removes the folder too,
+    so every device looks the same.
+
 ## Changes in 1.4.0 (2026-10-29)
 
 - **Files over 100 MB sync through the release too.** The repository takes

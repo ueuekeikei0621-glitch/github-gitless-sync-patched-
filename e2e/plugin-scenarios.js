@@ -280,6 +280,43 @@ async function main() {
   r = await ipad.sync();
   check(noErrors(r) && logged(r, "Nothing to sync"), "then neither side has anything to do");
 
+  section("17. A folder emptied by a move or a deletion goes from every device");
+  await phone.edit("患者/X_テスト/本体.md", "本体\n");
+  await phone.edit("患者/X_テスト/経過.md", "経過\n");
+  await phone.edit("患者/Y_テスト/本体.md", "Y\n");
+  await phone.sync();
+  r = await ipad.sync();
+  check(noErrors(r) && ipad.read("患者/X_テスト/本体.md") === "本体\n", "the iPad gets the patient folders");
+  fs.mkdirSync(path.join(ipad.root, "自分で作った"), { recursive: true });
+  // A file the plugin never synced keeps its folder
+  fs.writeFileSync(path.join(ipad.root, "患者/Y_テスト/残り.txt"), "untracked\n");
+  // Moved on GitHub like a discharge, then the auto-fix records it
+  fake.externalCommit({
+    write: { "患者/退院/X_テスト/本体.md": "本体\n", "患者/退院/X_テスト/経過.md": "経過\n" },
+    remove: ["患者/X_テスト/本体.md", "患者/X_テスト/経過.md", "患者/Y_テスト/本体.md"],
+    message: "X 退院",
+  });
+  autofix();
+  r = await ipad.sync();
+  const has = (p, rel) => fs.existsSync(path.join(p.root, rel));
+  check(noErrors(r) && ipad.read("患者/退院/X_テスト/本体.md") === "本体\n" && !has(ipad, "患者/X_テスト"),
+    "the moved patient's old folder goes from the iPad");
+  check(logged(r, "Removed empty folder"), "and the log says so");
+  check(has(ipad, "患者/Y_テスト/残り.txt") && ipad.read("患者/Y_テスト/本体.md") === null,
+    "a folder still holding a file the plugin never synced stays");
+  check(has(ipad, "自分で作った") && has(ipad, "患者/退院"), "an empty folder made by hand stays, and so do the parents");
+  r = await phone.sync();
+  check(noErrors(r) && !has(phone, "患者/X_テスト") && !has(phone, "患者/Y_テスト") && has(phone, "患者/退院/X_テスト"),
+    "the phone loses both emptied folders too");
+  await phone.remove("患者/退院/X_テスト/本体.md");
+  await phone.remove("患者/退院/X_テスト/経過.md");
+  r = await phone.sync();
+  check(noErrors(r) && !has(phone, "患者/退院") && !has(phone, "患者") && fake.file("患者/退院/X_テスト/本体.md") === null,
+    "deleting the last notes on the phone takes their folders with them");
+  r = await ipad.sync();
+  check(noErrors(r) && !has(ipad, "患者/退院") && has(ipad, "患者/Y_テスト/残り.txt"),
+    "and the iPad follows, keeping the folder with the unsynced file");
+
   section("Final state");
   r = await phone.sync();
   check(noErrors(r) && logged(r, "Nothing to sync"), "nothing left to sync");
