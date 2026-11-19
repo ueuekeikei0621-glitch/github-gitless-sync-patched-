@@ -17,6 +17,10 @@ ueuekeikei0621-glitch/obsidian-).
 - `plugin-scenarios.js`: edits on both sides, conflicts, moves and deletions,
   commits landing during a sync, binary files on iOS, media kept on the device,
   a deletion reaching another device, folders emptied by moves and deletions.
+- `conflict-scenarios.js`: what counts as formatting, notes Obsidian only
+  reformatted while they changed on GitHub, in every conflict handling, and
+  the versions "Overwrite local file" keeps: uploaded, saved once however the
+  sync is interrupted, kept on the device for media. It needs no vault clone.
 - `image-scenarios.js`: new photos shrunk before upload, with a stand-in
   encoder: waiting for the note to be saved and left alone, PNG and HEIC
   renamed to .jpg with their links in every form and in canvases, what stays

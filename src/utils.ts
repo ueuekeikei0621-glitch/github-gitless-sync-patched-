@@ -116,6 +116,142 @@ export function isMediaFile(filePath: string, extensions: string) {
     .includes(extension);
 }
 
+// Indentation and block quote markers before the content of a line
+const LINE_PREFIX = /^[ \t>]*/;
+// A code fence, which may follow block quote and list markers
+const FENCE = /^(?:[ \t>]|(?:[-*+]|\d+[.)])[ \t])*(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Splits a row of a Markdown table into its cells, without the spaces around
+ * them. The pipes at both ends are optional, and an escaped pipe (`\|`) is
+ * part of its cell.
+ *
+ * @param row The row, without what's before its first cell or pipe
+ * @returns The cells, null if the line has no pipe separating cells
+ */
+function tableCells(row: string): string[] | null {
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (let i = 0; i < row.length; i++) {
+    if (row[i] === "|" && !escaped) {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += row[i];
+    }
+    escaped = row[i] === "\\" && !escaped;
+  }
+  if (cells.length === 0) {
+    return null;
+  }
+  if (cell !== "") {
+    // No pipe closes the row
+    cells.push(cell);
+  }
+  if (cells[0] === "") {
+    // A pipe opens the row
+    cells.shift();
+  }
+  return cells.map((c) => c.replace(/^[ \t]+|[ \t]+$/g, ""));
+}
+
+/**
+ * Rewrites a note so that formatting no longer tells two versions apart:
+ * line endings, whitespace at the end of lines, blank lines at the end of the
+ * file, and the layout of tables. Every row of a table gets the same form:
+ * cells without the spaces around them, delimiter cells as `---` with their
+ * alignment colons, a pipe at both ends. Everything else stays as it is, and
+ * so does anything in a fenced code block.
+ */
+function canonicalNote(text: string): string {
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+$/, ""));
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  const row = (cells: string[]) => `|${cells.map((c) => ` ${c} |`).join("")}`;
+  // The marker that opened the code block we're in
+  let fence: string | null = null;
+  // What precedes each row of the table we're in
+  let table: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const marker = lines[i].match(FENCE);
+    if (fence !== null) {
+      if (
+        marker !== null &&
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
+        marker[2] === ""
+      ) {
+        fence = null;
+      }
+      continue;
+    }
+    if (marker !== null) {
+      fence = marker[1];
+      table = null;
+      continue;
+    }
+    const prefix = (lines[i].match(LINE_PREFIX) as RegExpMatchArray)[0];
+    const cells = tableCells(lines[i].slice(prefix.length));
+    if (cells !== null && table === prefix) {
+      lines[i] = prefix + row(cells);
+      continue;
+    }
+    table = null;
+    if (
+      i === 0 ||
+      cells === null ||
+      cells.length === 0 ||
+      !cells.every((c) => /^:?-+:?$/.test(c))
+    ) {
+      continue;
+    }
+    // A delimiter row: with the row before it, it starts a table if that one
+    // has as many cells and is indented and quoted the same way
+    const header = lines[i - 1];
+    const headerCells =
+      (header.match(LINE_PREFIX) as RegExpMatchArray)[0] === prefix
+        ? tableCells(header.slice(prefix.length))
+        : null;
+    if (headerCells !== null && headerCells.length === cells.length) {
+      lines[i - 1] = prefix + row(headerCells);
+      lines[i] =
+        prefix +
+        row(
+          cells.map(
+            (c) =>
+              `${c.startsWith(":") ? ":" : ""}---${c.endsWith(":") ? ":" : ""}`,
+          ),
+        );
+      table = prefix;
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Checks if two versions of a note differ only by formatting, which Obsidian
+ * changes on its own: it pads the cells of a table to align its columns as
+ * soon as one of them is touched.
+ *
+ * Line endings, whitespace at the end of lines, blank lines at the end of the
+ * file and the layout of table rows (the spaces around cells, the dashes of
+ * the delimiter row, the pipes at both ends) are formatting. Anything else is
+ * not: the text of a cell, the alignment of a column, indentation, and
+ * whatever is in a fenced code block.
+ *
+ * @param a One version of the note
+ * @param b The other version
+ * @returns True if the versions are the same apart from formatting
+ */
+export function differOnlyByFormatting(a: string, b: string): boolean {
+  return canonicalNote(a) === canonicalNote(b);
+}
+
 /**
  * Retries an async function until its return value satisfies a condition or max retries is reached.
  * Uses exponential backoff between retry attempts.

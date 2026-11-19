@@ -208,8 +208,11 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Conflict handling")
       .setDesc(
-        `What to do in case remote and local files conflict
-        when downloading from GitHub repository`,
+        "What to do when a file changed both here and on GitHub. " +
+          "A note that only changed here by formatting, like a table " +
+          "Obsidian realigned, is never a conflict: it takes the version " +
+          'on GitHub. "Overwrite local file" first saves a version edited ' +
+          "here next to the file, as <name>（端末の版 <date>）.",
       )
       .addDropdown((dropdown) => {
         dropdown

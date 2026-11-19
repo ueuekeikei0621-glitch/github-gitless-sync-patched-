@@ -22,6 +22,7 @@ import { GitHubSyncSettings } from "./settings/settings";
 import Logger, { LOG_FILE_NAME } from "./logger";
 import {
   decodeBase64String,
+  differOnlyByFormatting,
   gitBlobSHA,
   isMediaFile,
   textToArrayBuffer,
@@ -462,7 +463,17 @@ export default class SyncManager {
     );
     const remoteFiles = this.remoteState(remoteMetadata.files, files);
 
-    const conflicts = await this.findConflicts(remoteFiles);
+    // A note that Obsidian only reformatted here is no conflict: the remote
+    // version takes its place, whatever the conflict handling.
+    const conflicts: ConflictFile[] = [];
+    const reformatted: string[] = [];
+    for (const conflict of await this.findConflicts(remoteFiles)) {
+      if (await this.onlyReformatted(conflict)) {
+        reformatted.push(conflict.filePath);
+      } else {
+        conflicts.push(conflict);
+      }
+    }
 
     // We treat every resolved conflict as an upload SyncAction, mainly cause
     // the user has complete freedom on the edits they can apply to the conflicting files.
@@ -493,6 +504,17 @@ export default class SyncManager {
         conflictActions = conflicts.map((conflict: ConflictFile) => {
           return { type: "download", filePath: conflict.filePath };
         });
+        // The local versions have real edits, so they're kept next to the
+        // files, where a download really replaces one. Hidden files, like
+        // the config dir, are no notes to keep versions of.
+        for (const { filePath } of conflicts) {
+          if (
+            files[filePath] !== undefined &&
+            !filePath.split("/").some((part) => part.startsWith("."))
+          ) {
+            await this.keepLocalVersion(filePath);
+          }
+        }
       } else if (this.settings.conflictHandling === "overwriteRemote") {
         // The user explicitly wants to always overwrite the remote file
         // in case of conflicts so we just upload the remote file to solve it.
@@ -501,6 +523,16 @@ export default class SyncManager {
         // user expect must be the content of the local file with no changes.
         conflictActions = conflicts.map((conflict: ConflictFile) => {
           return { type: "upload", filePath: conflict.filePath };
+        });
+      }
+    }
+    if (reformatted.length > 0) {
+      await this.logger.info("Only reformatted locally", reformatted);
+      for (const filePath of reformatted) {
+        // Like a file that didn't change here at all
+        conflictActions.push({
+          type: remoteFiles[filePath].deleted ? "delete_local" : "download",
+          filePath,
         });
       }
     }
@@ -820,7 +852,12 @@ export default class SyncManager {
               });
               return decodeBase64String(res.content);
             })(),
-            await this.vault.adapter.read(normalizePath(filePath)),
+            // Only the conflict view and the check for a reformatted note
+            // need the local text. Reading a binary file as text fails on
+            // iOS, which must not stop a sync that isn't going to show it.
+            this.settings.conflictHandling === "ask" || filePath.endsWith(".md")
+              ? await this.vault.adapter.read(normalizePath(filePath))
+              : "",
           ]);
           return {
             filePath,
@@ -828,6 +865,104 @@ export default class SyncManager {
             localContent,
           };
         }),
+    );
+  }
+
+  /**
+   * Whether the local version of a conflicting note differs from the version
+   * last synced only by formatting, like a table Obsidian padded when a cell
+   * was touched. Anything we can't tell counts as a real edit.
+   */
+  private async onlyReformatted(conflict: ConflictFile): Promise<boolean> {
+    const sha = this.metadataStore.data.files[conflict.filePath]?.sha;
+    if (!conflict.filePath.endsWith(".md") || !sha) {
+      return false;
+    }
+    try {
+      const blob = await this.client.getBlob({ sha });
+      return differOnlyByFormatting(
+        decodeBase64String(blob.content),
+        conflict.localContent,
+      );
+    } catch (err) {
+      await this.logger.warn("Couldn't get the last synced version", {
+        filePath: conflict.filePath,
+        error: `${err}`,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Keeps the local version of a file that the download of the remote one is
+   * about to replace: it's saved next to it as `<name>（端末の版 <date>）`, the
+   * way the auto-fix workflow names its copies of the versions on GitHub, and
+   * uploaded like any new file.
+   */
+  private async keepLocalVersion(filePath: string) {
+    const normalizedPath = normalizePath(filePath);
+    const slash = normalizedPath.lastIndexOf("/");
+    const name = normalizedPath.slice(slash + 1);
+    const dot = name.lastIndexOf(".");
+    const prefix = `${normalizedPath.slice(0, slash + 1)}${dot > 0 ? name.slice(0, dot) : name}（端末の版 `;
+    const suffix = `）${dot > 0 ? name.slice(dot) : ""}`;
+    const sha = await this.calculateSHA(normalizedPath);
+    // A sync that stopped before the download has left this version saved
+    // already: another copy would only differ by its date.
+    const { files } = await this.vault.adapter.list(
+      normalizePath(normalizedPath.slice(0, slash + 1)),
+    );
+    let copyPath: string | null = null;
+    for (const sibling of files) {
+      if (
+        sibling.startsWith(prefix) &&
+        sibling.endsWith(suffix) &&
+        (await this.calculateSHA(sibling)) === sha
+      ) {
+        copyPath = sibling;
+        break;
+      }
+    }
+    if (copyPath === null) {
+      const d = new Date();
+      const pad = (n: number) => `${n}`.padStart(2, "0");
+      const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
+      copyPath = `${prefix}${stamp}${suffix}`;
+      // Never over another version saved in the same minute, here or on
+      // another device
+      for (
+        let n = 2;
+        copyPath in this.lastTree ||
+        (await this.vault.adapter.exists(copyPath));
+        n++
+      ) {
+        copyPath = `${prefix}${stamp} ${n}${suffix}`;
+      }
+      this.eventsListener.ownFile(copyPath);
+      // Bytes, not text: reading a binary file as text fails on iOS
+      await this.vault.adapter.writeBinary(
+        copyPath,
+        await this.vault.adapter.readBinary(normalizedPath),
+      );
+    }
+    // Recorded as a new file here, not by its create event, which may fire
+    // only after this sync has decided what to upload
+    const known: FileMetadata | undefined =
+      this.metadataStore.data.files[copyPath];
+    if (known === undefined || known.deleted) {
+      this.metadataStore.data.files[copyPath] = {
+        path: copyPath,
+        sha: null,
+        dirty: true,
+        justDownloaded: false,
+        lastModified: Date.now(),
+      };
+      await this.metadataStore.save();
+    }
+    await this.logger.info("Kept the local version", { filePath, copyPath });
+    new Notice(
+      `${filePath} changed on GitHub too. Your version is kept as ${copyPath.slice(slash + 1)}.`,
+      10000,
     );
   }
 

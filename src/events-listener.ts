@@ -10,12 +10,24 @@ import { IMAGE_STATE_FILE_NAME } from "./image-shrink";
  * Tracks changes to local sync directory and updates files metadata.
  */
 export default class EventsListener {
+  // Files the sync is creating and records itself, see ownFile
+  private own = new Set<string>();
+
   constructor(
     private vault: Vault,
     private metadataStore: MetadataStore,
     private settings: GitHubSyncSettings,
     private logger: Logger,
   ) {}
+
+  /**
+   * Announces a file that the sync creates and records in the metadata
+   * itself. Its create event, which may fire before or after the sync has
+   * uploaded the file, then leaves that record alone.
+   */
+  ownFile(filePath: string) {
+    this.own.add(filePath);
+  }
 
   start(plugin: GitHubSyncPlugin) {
     // We need to register all the events we subscribe to so they can
@@ -36,6 +48,11 @@ export default class EventsListener {
     }
     if (file instanceof TFolder) {
       // Skip folders
+      return;
+    }
+    if (this.own.delete(file.path)) {
+      // Created and recorded by the sync, not by the user
+      await this.logger.info("Skipped own created file", file.path);
       return;
     }
 

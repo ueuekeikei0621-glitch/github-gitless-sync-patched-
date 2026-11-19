@@ -8,6 +8,21 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.5.0 (2026-11-19)
+
+- **A note Obsidian only reformatted is no longer a conflict.** Obsidian
+  realigns a table as soon as a cell is touched, so a note could change on the
+  device without being edited; if it had changed on GitHub too, the conflict
+  view opened and held up the whole sync. A note that differs from its last
+  synced version only by formatting (the padding of tables, spaces at the end
+  of lines, line endings) now takes the version on GitHub, whatever "Conflict
+  handling" is set to, and goes if it was moved or deleted there.
+- **"Overwrite local file" keeps what was edited on the device.** Before the
+  download replaces a file edited on both sides, the device's version is saved
+  next to it as `<name>（端末の版 <date>）` and uploaded like any new file. On
+  iOS, a photo or another binary file edited on both sides no longer stops the
+  sync, unless conflicts are asked about.
+
 ## Changes in 1.4.1 (2026-11-11)
 
 - **Folders emptied by a move or a deletion go from every device.** Git keeps
