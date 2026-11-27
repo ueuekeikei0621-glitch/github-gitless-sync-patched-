@@ -8,6 +8,21 @@ Install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat) using this
 repository's URL. It has the same plugin id, so it replaces the original plugin
 and keeps its settings and sync state.
 
+## Changes in 1.6.0 (2026-11-27)
+
+- **Photos in notes are shown small, and a tap opens them full screen.** A
+  photo taken upright filled the whole screen of a phone and pushed the text
+  around it out of view. Now photos in notes are no taller than 160 pixels, in
+  editing and reading view, and a tap opens one in Obsidian's own full screen
+  viewer (Obsidian 1.13 or later): pinch to zoom, swipe to the other photos of
+  the note, swipe down to close.
+  - In editing view Obsidian only selects a photo on the first tap and opens
+    it on the next; now the first tap opens it there too.
+  - A size written in the link, like `![[photo.jpg|300]]`, is kept, and
+    pictures in canvases, bases and PDFs are left as they are.
+  - The new settings section "Photos in notes" sets the height and turns
+    either part off.
+
 ## Changes in 1.5.0 (2026-11-19)
 
 - **A note Obsidian only reformatted is no longer a conflict.** Obsidian

@@ -7,3 +7,16 @@
     height: 100%;
     width: 100%;
 }
+
+/* Photos in notes, shown small (src/photo-view.ts). A size written in the
+   link, like ![[photo.jpg|300]], is kept, and so are pictures in a base, a
+   canvas or a PDF embedded in the note. */
+body.ggs-small-photos .workspace-leaf-content[data-type="markdown"] :is(.markdown-reading-view, .markdown-source-view) img:not([width]):not(.cm-widgetBuffer):not(:is(.bases-embed, .canvas-embed, .pdf-embed) img) {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: var(--ggs-small-photo-height, 160px);
+    object-fit: contain;
+    align-self: flex-start;
+    cursor: zoom-in;
+}

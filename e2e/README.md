@@ -34,6 +34,12 @@ ueuekeikei0621-glitch/obsidian-).
 - `image-encode-test.js`: the real encoder in headless Chromium (Playwright) on
   images made with ImageMagick and Pillow: EXIF orientation, size limit,
   transparency, quality, bad input. `run.sh` runs it when Playwright is there.
+- `photo-view-test.js`: photos in notes in headless Chromium (Playwright), on a
+  page laid out like a note in Obsidian 1.15 on a phone, with a stand-in for
+  Obsidian's own tap handling: shown small in editing and reading view, sizes
+  written in links and other pictures left alone, another height, turned off;
+  one tap opening a photo in editing view, and the taps left to Obsidian.
+  `run.sh` runs it when Playwright is there.
 - `media-scenarios.js`: videos and audio synced through a draft release between
   several phones: moves, deletions and the trash, a lost index, failed uploads,
   commits landing during a sync, conflicts, size limits, a transfer that kills

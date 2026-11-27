@@ -23,6 +23,9 @@ export interface GitHubSyncSettings {
   shrinkImages: boolean;
   imageMaxSide: number;
   imageQuality: number;
+  smallPhotos: boolean;
+  smallPhotoHeight: number;
+  openPhotosWithOneTap: boolean;
 }
 
 const VIDEO_AUDIO_EXTENSIONS =
@@ -63,4 +66,7 @@ export const DEFAULT_SETTINGS: GitHubSyncSettings = {
   shrinkImages: true,
   imageMaxSide: 2500,
   imageQuality: 80,
+  smallPhotos: true,
+  smallPhotoHeight: 160,
+  openPhotosWithOneTap: true,
 };

@@ -9,9 +9,21 @@ function check(cond, message) {
 }
 
 const listeners = {};
+const bodyClasses = new Set();
+const bodyStyle = {};
 global.document = {
   visibilityState: "visible",
   addEventListener(type, cb) { (listeners[type] ||= []).push(cb); },
+  body: {
+    classList: {
+      toggle(c, on) { if (on) bodyClasses.add(c); else bodyClasses.delete(c); },
+      remove(c) { bodyClasses.delete(c); },
+    },
+    style: {
+      setProperty(k, v) { bodyStyle[k] = v; },
+      removeProperty(k) { delete bodyStyle[k]; },
+    },
+  },
 };
 function setVisibility(state) {
   document.visibilityState = state;
@@ -20,6 +32,8 @@ function setVisibility(state) {
 
 async function load(settings) {
   for (const k of Object.keys(listeners)) delete listeners[k];
+  bodyClasses.clear();
+  for (const k of Object.keys(bodyStyle)) delete bodyStyle[k];
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "main-test-"));
   let ready = null;
   const app = {
@@ -78,6 +92,22 @@ const configured = {
   check(t.plugin.settings.releaseMaxSizeMB === 100, "up to 100 MB");
   check(t.plugin.settings.shrinkImages === true && t.plugin.settings.imageMaxSide === 2500 &&
     t.plugin.settings.imageQuality === 80, "and new photos shrink to 2500 pixels, JPEG 80%");
+  check(t.plugin.settings.smallPhotos === true && t.plugin.settings.smallPhotoHeight === 160 &&
+    t.plugin.settings.openPhotosWithOneTap === true,
+    "and photos in notes are shown 160 pixels high and open with one tap");
+  check(bodyClasses.has("ggs-small-photos") && bodyStyle["--ggs-small-photo-height"] === "160px",
+    "photos are shown small as soon as the plugin loads");
+  check((listeners.click || []).length === 1, "and taps on them are listened to");
+  await t.plugin.onunload();
+  check(!bodyClasses.has("ggs-small-photos") && !("--ggs-small-photo-height" in bodyStyle),
+    "when the plugin stops, photos are shown as they were");
+
+  t = await load({ ...configured, smallPhotos: false, smallPhotoHeight: 240 });
+  check(!bodyClasses.has("ggs-small-photos"), "Show photos small OFF: photos are shown as they are");
+  t.plugin.settings.smallPhotos = true;
+  t.plugin.photoView.apply();
+  check(bodyClasses.has("ggs-small-photos") && bodyStyle["--ggs-small-photo-height"] === "240px",
+    "turned on in the settings: small at once, at the height set");
 
   console.log(`\n${failures === 0 ? "ALL PASSED" : `${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

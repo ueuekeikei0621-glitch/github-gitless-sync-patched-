@@ -9,6 +9,7 @@ import { GitHubSyncSettings, DEFAULT_SETTINGS } from "./settings/settings";
 import GitHubSyncSettingsTab from "./settings/tab";
 import SyncManager, { ConflictFile, ConflictResolution } from "./sync-manager";
 import Logger from "./logger";
+import PhotoView from "./photo-view";
 import {
   ConflictsResolutionView,
   CONFLICTS_RESOLUTION_VIEW_TYPE,
@@ -18,6 +19,7 @@ export default class GitHubSyncPlugin extends Plugin {
   settings: GitHubSyncSettings;
   syncManager: SyncManager;
   logger: Logger;
+  photoView: PhotoView | null = null;
 
   statusBarItem: HTMLElement | null = null;
   syncRibbonIcon: HTMLElement | null = null;
@@ -157,6 +159,14 @@ export default class GitHubSyncPlugin extends Plugin {
       icon: "refresh-cw",
       callback: this.openConflictsView.bind(this),
     });
+
+    // Last, and on its own: how photos look never gets in the way of syncing.
+    try {
+      this.photoView = new PhotoView(this, () => this.settings);
+      this.photoView.start();
+    } catch (err) {
+      console.error("GitHub Gitless Sync: photos in notes", err);
+    }
   }
 
   isConfigured() {
@@ -213,6 +223,7 @@ export default class GitHubSyncPlugin extends Plugin {
 
   async onunload() {
     this.stopSyncInterval();
+    this.photoView?.stop();
   }
 
   showStatusBarItem() {
@@ -341,6 +352,7 @@ export default class GitHubSyncPlugin extends Plugin {
   async reset() {
     this.settings = DEFAULT_SETTINGS;
     this.saveSettings();
+    this.photoView?.apply();
     await this.syncManager.resetMetadata();
   }
 }

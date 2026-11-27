@@ -13,5 +13,9 @@ node e2e/conflict-scenarios.js
 node e2e/media-scenarios.js "$vault" "$script"
 node e2e/image-scenarios.js "$vault" "$script"
 node e2e/large-file-scenarios.js "$vault" "$script"
-# The real image encoder, in headless Chromium, when Playwright is there
-if node -e 'require("playwright")' 2>/dev/null; then node e2e/image-encode-test.js; fi
+# The real image encoder and photos in notes, in headless Chromium, when
+# Playwright is there
+if node -e 'require("playwright")' 2>/dev/null; then
+  node e2e/image-encode-test.js
+  node e2e/photo-view-test.js
+fi

@@ -26,6 +26,7 @@ const files = [
   "logger.ts",
   "settings/settings.ts",
   "settings/tab.ts",
+  "photo-view.ts",
   "main.ts",
 ].filter((file) => fs.existsSync(path.join(srcDir, file)));
 for (const file of files) {

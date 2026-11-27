@@ -335,6 +335,58 @@ export default class GitHubSyncSettingsTab extends PluginSettingTab {
         }),
     );
 
+    new Setting(containerEl).setName("Photos in notes").setHeading();
+
+    new Setting(containerEl)
+      .setName("Show photos small")
+      .setDesc(
+        "Photos in notes are no taller than the height below, so the text " +
+          "around them stays readable. Tap one to see it full screen " +
+          "(Obsidian 1.13 or later). A size written in the link, like " +
+          "![[photo.jpg|300]], is kept.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.smallPhotos)
+          .onChange(async (value) => {
+            this.plugin.settings.smallPhotos = value;
+            this.plugin.photoView?.apply();
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName("Height of small photos (pixels)")
+      .addText((text) =>
+        text
+          .setPlaceholder("160")
+          .setValue(`${this.plugin.settings.smallPhotoHeight}`)
+          .onChange(async (value) => {
+            const height = Math.round(Number(value));
+            if (Number.isFinite(height) && height >= 40) {
+              this.plugin.settings.smallPhotoHeight = height;
+              this.plugin.photoView?.apply();
+              await this.plugin.saveSettings();
+            }
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Open a photo with one tap in editing view")
+      .setDesc(
+        "In reading view a tap opens a photo full screen. In editing view " +
+          "Obsidian only selects it on the first tap and opens it on the " +
+          "next; with this on, the first tap opens it there too.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.openPhotosWithOneTap)
+          .onChange(async (value) => {
+            this.plugin.settings.openPhotosWithOneTap = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
     new Setting(containerEl).setName("Interface").setHeading();
 
     new Setting(containerEl)
